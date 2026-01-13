@@ -1,9 +1,7 @@
 (() => {
-  // ===== WORD SOURCE =====
   const WORDS = window.VOCAB_WORDS || window.WORDS || [];
   const LETTERS = "abcdefghij".split("");
 
-  // ===== ELEMENTS =====
   const els = {
     overlay: document.getElementById("difficultyOverlay"),
     mEasy: document.getElementById("mEasy"),
@@ -28,23 +26,21 @@
     restartBtn: document.getElementById("restartBtn"),
   };
 
-  // ===== CONFIG =====
-  const MODE = {
-    easy: 3,
-    medium: 5,
-    hard: 6,
-    extreme: 10
-  };
+  // --- HARD GUARD: stop if modal buttons not found ---
+  if (!els.mEasy || !els.mMedium || !els.mHard || !els.mExtreme) {
+    console.error("Difficulty buttons not found in DOM.");
+    return;
+  }
 
-  // ===== STATE =====
-  let mode = "medium";
+  const MODE = { easy: 3, medium: 5, hard: 6, extreme: 10 };
+
+  let mode = null;
   let qIndex = 0;
   let correct = 0;
   let locked = false;
   let round = [];
   let history = [];
 
-  // ===== HELPERS =====
   function shuffle(arr) {
     for (let i = arr.length - 1; i > 0; i--) {
       const j = Math.floor(Math.random() * (i + 1));
@@ -53,14 +49,6 @@
     return arr;
   }
 
-  function escapeHtml(str) {
-    return String(str || "")
-      .replaceAll("&", "&amp;")
-      .replaceAll("<", "&lt;")
-      .replaceAll(">", "&gt;");
-  }
-
-  // ===== HUD =====
   function updateHUD() {
     const asked = qIndex + 1;
     els.qNum.textContent = `${asked}/10`;
@@ -68,9 +56,8 @@
     els.climber.style.bottom = `${correct * 10}%`;
   }
 
-  // ===== ROUND BUILD =====
   function buildRound() {
-    const pool = shuffle([...new Set(WORDS.map(w => String(w).trim()).filter(Boolean))]);
+    const pool = shuffle([...new Set(WORDS.map(w => String(w).trim()))]);
     const picked = pool.slice(0, 10);
 
     round = picked.map(word => {
@@ -87,36 +74,31 @@
         word,
         options,
         answerIndex: options.indexOf(word),
-        def: `Definition: ${word} (loading…)`
+        def: "Definition loading…"
       };
     });
   }
 
-  // ===== DICTIONARY FETCH =====
   async function loadDefinition(q) {
     try {
-      const r = await fetch(`https://api.dictionaryapi.dev/api/v2/entries/en/${encodeURIComponent(q.word)}`);
+      const r = await fetch(
+        `https://api.dictionaryapi.dev/api/v2/entries/en/${encodeURIComponent(q.word)}`
+      );
       const d = await r.json();
       const def = d?.[0]?.meanings?.[0]?.definitions?.[0]?.definition;
-      if (def) {
+      if (def && round[qIndex] === q) {
         q.def = "Definition: " + def.replace(new RegExp(`\\b${q.word}\\b`, "ig"), "_____");
-        if (round[qIndex] === q) {
-          els.definition.textContent = q.def;
-        }
+        els.definition.textContent = q.def;
       }
     } catch {
-      q.def = "Definition unavailable.";
       if (round[qIndex] === q) {
-        els.definition.textContent = q.def;
+        els.definition.textContent = "Definition unavailable.";
       }
     }
   }
 
-  // ===== RENDER QUESTION =====
   function render() {
     locked = false;
-
-    // clear focus & previous state
     document.activeElement && document.activeElement.blur();
     els.choices.innerHTML = "";
 
@@ -126,32 +108,28 @@
     els.definition.textContent = q.def;
 
     q.options.forEach((opt, i) => {
-      const btn = document.createElement("button");
-      btn.className = "choice";
-      btn.innerHTML = `<b>${LETTERS[i]}.</b> ${escapeHtml(opt)}`;
-      btn.onclick = () => pick(i);
-      els.choices.appendChild(btn);
+      const b = document.createElement("button");
+      b.className = "choice";
+      b.innerHTML = `<b>${LETTERS[i]}.</b> ${opt}`;
+      b.onclick = () => pick(i);
+      els.choices.appendChild(b);
     });
 
     loadDefinition(q);
   }
 
-  // ===== PICK ANSWER =====
   function pick(i) {
     if (locked) return;
     locked = true;
 
     const q = round[qIndex];
-    const picked = q.options[i];
-    const correctWord = q.options[q.answerIndex];
     const ok = i === q.answerIndex;
-
     if (ok) correct++;
 
     history.push({
       def: q.def,
-      correct: correctWord,
-      picked,
+      correct: q.word,
+      picked: q.options[i],
       ok
     });
 
@@ -161,10 +139,9 @@
       qIndex++;
       if (qIndex >= 10) showResults();
       else render();
-    }, 160);
+    }, 150);
   }
 
-  // ===== RESULTS =====
   function showResults() {
     els.gameCard.classList.add("hidden");
     els.resultCard.classList.remove("hidden");
@@ -174,11 +151,10 @@
 
     els.recap.innerHTML = history.map((h, i) => `
       <div class="recapItem">
-        <div class="muted"><b>Q${i + 1} Definition:</b> ${escapeHtml(h.def)}</div>
+        <div class="muted"><b>Q${i + 1}:</b> ${h.def}</div>
         <div>
-          <b>Correct:</b> ${escapeHtml(h.correct)}
-          &nbsp; | &nbsp;
-          <b>You:</b> ${escapeHtml(h.picked)}
+          <b>Correct:</b> ${h.correct} |
+          <b>You:</b> ${h.picked}
           <span class="${h.ok ? "ok" : "bad"}">
             ${h.ok ? "✔" : "✖"}
           </span>
@@ -187,7 +163,6 @@
     `).join("");
   }
 
-  // ===== START GAME =====
   function start(selected) {
     mode = selected;
     qIndex = 0;
@@ -195,8 +170,8 @@
     history = [];
     locked = false;
 
+    // ONLY hide overlay here
     els.overlay.style.display = "none";
-    els.overlay.classList.add("hidden");
 
     els.resultCard.classList.add("hidden");
     els.gameCard.classList.remove("hidden");
@@ -205,7 +180,7 @@
     render();
   }
 
-  // ===== BUTTON WIRING =====
+  // === BUTTON WIRING (THIS IS THE FIX) ===
   els.mEasy.onclick = () => start("easy");
   els.mMedium.onclick = () => start("medium");
   els.mHard.onclick = () => start("hard");
@@ -215,12 +190,11 @@
 
   els.restartBtn.onclick = () => {
     els.overlay.style.display = "flex";
-    els.overlay.classList.remove("hidden");
-    els.resultCard.classList.add("hidden");
     els.gameCard.classList.add("hidden");
+    els.resultCard.classList.add("hidden");
   };
 
-  // ===== INIT =====
+  // === INITIAL STATE ===
   els.overlay.style.display = "flex";
   els.gameCard.classList.add("hidden");
   els.resultCard.classList.add("hidden");
