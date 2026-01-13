@@ -1,0 +1,276 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>GRE Vocab Ladder Quiz</title>
+  <style>
+    :root { color-scheme: dark; }
+    body{
+      margin:0; padding:22px;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif;
+      background:
+        radial-gradient(1000px 520px at 20% 10%, rgba(140,120,255,.22), transparent 60%),
+        radial-gradient(900px 520px at 80% 15%, rgba(60,180,255,.16), transparent 55%),
+        radial-gradient(900px 520px at 35% 90%, rgba(255,140,120,.12), transparent 55%),
+        #0b0b0f;
+      color: rgba(255,255,255,.92);
+    }
+    .wrap{ max-width: 1000px; margin:0 auto; }
+    h1{ margin:0 0 8px; font-size:22px; letter-spacing:.2px; }
+    .sub{ opacity:.75; font-size:13px; margin-bottom:14px; }
+
+    .card{
+      border: 1px solid rgba(160,160,190,.35);
+      border-radius: 18px;
+      background: rgba(20,20,26,.58);
+      backdrop-filter: blur(10px);
+      box-shadow: 0 14px 36px rgba(0,0,0,.25);
+      padding: 14px;
+      margin: 14px 0;
+    }
+    .hidden{ display:none !important; }
+
+    .top{
+      display:grid;
+      grid-template-columns: 1fr 280px;
+      gap: 14px;
+      align-items:start;
+    }
+    @media (max-width: 880px){
+      .top{ grid-template-columns: 1fr; }
+    }
+
+    .prompt{
+      border-radius: 16px;
+      border: 1px solid rgba(160,160,190,.30);
+      background: rgba(0,0,0,.14);
+      padding: 12px 12px;
+    }
+    .promptHead{
+      display:flex; justify-content:space-between; align-items:center; gap:10px;
+      margin-bottom: 6px;
+    }
+    .qnum{ font-weight: 950; font-size: 18px; }
+    .muted{ opacity:.72; font-size:13px; }
+    .definition{
+      font-size: 20px;
+      line-height: 1.25;
+      margin: 0;
+    }
+    .definition b{ opacity:.9; }
+
+    .choices{
+      display:grid;
+      grid-template-columns: 1fr;
+      gap: 12px;
+      margin-top: 12px;
+    }
+    @media (min-width: 760px){ .choices{ grid-template-columns: 1fr 1fr; } }
+
+    button.choice{
+      width:100%;
+      text-align:left;
+      padding: 14px 14px;
+      border-radius: 14px;
+      border: 1px solid rgba(160,160,190,.35);
+      background: rgba(0,0,0,.10);
+      color: rgba(255,255,255,.92);
+      font-size: 18px;
+      cursor:pointer;
+    }
+    button.choice:hover{ border-color: rgba(200,200,230,.55); }
+    button.choice:disabled{ opacity:.55; cursor:not-allowed; }
+    button.choice b{ display:inline-block; width: 26px; font-weight: 950; }
+
+    .status{ min-height: 18px; margin-top: 10px; font-size: 14px; opacity:.85; }
+
+    .pill{
+      display:inline-flex; align-items:center; gap:8px;
+      padding: 6px 10px;
+      border-radius: 999px;
+      border: 1px solid rgba(160,160,190,.40);
+      background: rgba(0,0,0,.10);
+      font-weight: 800;
+      font-size: 13px;
+    }
+
+    .loadingPill{
+      display:inline-flex; align-items:center; gap:10px;
+      padding: 6px 10px; border-radius: 999px;
+      border: 1px solid rgba(160,160,190,.40);
+      background: rgba(0,0,0,.10);
+      font-weight: 800; font-size: 13px;
+    }
+    .spinner{
+      width:14px; height:14px; border-radius:50%;
+      border:2px solid rgba(255,255,255,.22);
+      border-top-color: rgba(255,255,255,.78);
+      animation: spin .8s linear infinite;
+    }
+    @keyframes spin{ to{ transform: rotate(360deg);} }
+
+    /* Ladder (no highlighting) */
+    .ladderWrap{
+      border-radius: 16px;
+      border: 1px solid rgba(160,160,190,.30);
+      background: rgba(0,0,0,.14);
+      padding: 12px;
+    }
+    .ladderTitle{
+      display:flex; justify-content:space-between; align-items:center; gap:10px;
+      margin-bottom: 10px;
+    }
+    .ladder{
+      position:relative;
+      height: 380px;
+      border-radius: 14px;
+      border: 1px solid rgba(160,160,190,.25);
+      background: rgba(0,0,0,.08);
+      overflow:hidden;
+    }
+    .rung{
+      position:absolute;
+      left: 14px; right: 14px;
+      height: 18px;
+      display:flex; align-items:center; gap:10px;
+    }
+    .rung .n{ width: 22px; text-align:right; font-weight: 950; opacity:.65; font-size: 12px; }
+    .rung .bar{ height: 4px; flex:1; border-radius:999px; background: rgba(255,255,255,.18); }
+    .ground{
+      position:absolute; left: 14px; right:14px; bottom: 16px;
+      height: 2px; border-radius: 999px;
+      background: rgba(255,255,255,.10);
+    }
+    .climber{
+      position:absolute;
+      left: 6px;
+      transform: translateY(-50%);
+      font-size: 22px;
+      transition: top 180ms ease;
+      filter: drop-shadow(0 8px 12px rgba(0,0,0,.35));
+    }
+
+    /* Modal */
+    .overlay{
+      position:fixed; inset:0;
+      background: rgba(0,0,0,.66);
+      display:flex; align-items:center; justify-content:center;
+      z-index: 9999;
+    }
+    .modal{
+      width: min(760px, calc(100vw - 28px));
+      border-radius: 18px;
+      border: 1px solid rgba(160,160,190,.45);
+      background: rgba(18,18,24,.94);
+      backdrop-filter: blur(12px);
+      box-shadow: 0 26px 70px rgba(0,0,0,.48);
+      padding: 18px;
+    }
+    .modal h2{ margin:0 0 6px; font-size: 22px; }
+    .diffBtns{ display:flex; gap:10px; flex-wrap:wrap; margin-top: 12px; }
+    .diffBtns button{
+      flex:1;
+      min-width: 160px;
+      padding: 14px 14px;
+      border-radius: 14px;
+      border: 1px solid rgba(160,160,190,.40);
+      background: linear-gradient(135deg, rgba(140,120,255,.24), rgba(60,180,255,.14));
+      color: rgba(255,255,255,.92);
+      font-weight: 950;
+      font-size: 16px;
+      cursor:pointer;
+    }
+    .diffBtns button:hover{ border-color: rgba(220,220,250,.55); }
+
+    /* Results */
+    .scoreBig{ font-size: 22px; font-weight: 950; }
+    .miss{
+      margin: 10px 0;
+      padding: 10px;
+      border-radius: 14px;
+      border: 1px solid rgba(160,160,190,.30);
+      background: rgba(0,0,0,.10);
+    }
+    .row{ display:flex; gap:10px; flex-wrap:wrap; align-items:center; }
+    button.primary{
+      padding: 12px 14px;
+      border-radius: 14px;
+      border: 2px solid rgba(160,160,190,.45);
+      background: linear-gradient(135deg, rgba(140,120,255,.30), rgba(60,180,255,.18));
+      color: rgba(255,255,255,.92);
+      font-weight: 950;
+      font-size: 16px;
+      cursor:pointer;
+    }
+    button.secondary{
+      padding: 12px 14px;
+      border-radius: 14px;
+      border: 1px solid rgba(160,160,190,.35);
+      background: rgba(0,0,0,.10);
+      color: rgba(255,255,255,.92);
+      font-weight: 900;
+      font-size: 16px;
+      cursor:pointer;
+    }
+  </style>
+</head>
+<body>
+  <div id="difficultyOverlay" class="overlay">
+    <div class="modal">
+      <h2>Select difficulty</h2>
+      <div class="muted">Sets number of answer choices. Starts instantly after selection.</div>
+      <div class="diffBtns">
+        <button id="mEasy" type="button">Easy <span class="muted">(3 options)</span></button>
+        <button id="mMedium" type="button">Medium <span class="muted">(5 options)</span></button>
+        <button id="mHard" type="button">Hard <span class="muted">(6 options)</span></button>
+        <button id="mExtreme" type="button">Extreme <span class="muted">(10 options)</span></button>
+      </div>
+      <div class="muted" style="margin-top:12px;">Keyboard: 1 Easy, 2 Medium, 3 Hard, 4 Extreme</div>
+    </div>
+  </div>
+
+  <div class="wrap">
+    <h1>GRE Vocab Ladder Quiz</h1>
+    <div class="sub">10 questions per round â¢ definition only â¢ climb one rung per correct answer</div>
+
+    <div id="quizCard" class="card hidden">
+      <div class="top">
+        <div class="prompt">
+          <div class="promptHead">
+            <div><span class="qnum" id="qNum">Q1</span> <span class="muted">of 10</span></div>
+            <div class="loadingPill hidden" id="loadingPill"><span class="spinner"></span><span id="loadingText">Loadingâ¦</span></div>
+          </div>
+          <div class="definition" id="definition"><b>Definition:</b> Loadingâ¦</div>
+          <div id="choices" class="choices"></div>
+          <div class="status" id="status"></div>
+        </div>
+
+        <div class="ladderWrap">
+          <div class="ladderTitle">
+            <span class="pill">Round <span id="roundNum">1</span></span>
+            <span class="pill">Correct: <span id="correctCount">0</span>/10</span>
+          </div>
+          <div class="ladder" id="ladder">
+            <div class="climber" id="climber">ð§</div>
+            <div class="ground"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div id="resultCard" class="card hidden">
+      <div class="scoreBig">Round Score: <span id="pct">0%</span> (<span id="correct">0</span>/10)</div>
+      <div class="muted" style="margin-top:8px;">Recap (correct answer shown for every question):</div>
+      <div id="recap" style="margin-top:10px;"></div>
+      <div class="row" style="margin-top:14px;">
+        <button id="nextBtn" class="primary">Next 10</button>
+        <button id="restartBtn" class="secondary">Restart</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="words.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
