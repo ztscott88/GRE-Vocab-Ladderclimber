@@ -5,11 +5,6 @@ document.addEventListener("DOMContentLoaded", () => {
 
   const els = {
     overlay: document.getElementById("difficultyOverlay"),
-    mEasy: document.getElementById("mEasy"),
-    mMedium: document.getElementById("mMedium"),
-    mHard: document.getElementById("mHard"),
-    mExtreme: document.getElementById("mExtreme"),
-
     gameCard: document.getElementById("gameCard"),
     resultCard: document.getElementById("resultCard"),
 
@@ -17,179 +12,134 @@ document.addEventListener("DOMContentLoaded", () => {
     scoreInline: document.getElementById("scoreInline"),
     definition: document.getElementById("definition"),
     choices: document.getElementById("choices"),
-
     climber: document.getElementById("climber"),
 
     scoreOut: document.getElementById("scoreOut"),
     pctOut: document.getElementById("pctOut"),
     recap: document.getElementById("recap"),
-    nextBtn: document.getElementById("nextBtn"),
     restartBtn: document.getElementById("restartBtn"),
+
+    mEasy: document.getElementById("mEasy"),
+    mMedium: document.getElementById("mMedium"),
+    mHard: document.getElementById("mHard"),
+    mExtreme: document.getElementById("mExtreme"),
   };
 
-  const MODE = { easy: 3, medium: 5, hard: 6, extreme: 10 };
+  const MODE = { easy:3, medium:5, hard:6, extreme:10 };
 
-  let mode = null;
-  let qIndex = 0;
-  let correct = 0;
-  let locked = false;
-  let round = [];
-  let history = [];
+  let mode, qIndex, correct, round, history, locked;
 
-  function shuffle(arr) {
-    for (let i = arr.length - 1; i > 0; i--) {
-      const j = Math.floor(Math.random() * (i + 1));
-      [arr[i], arr[j]] = [arr[j], arr[i]];
+  function shuffle(a){
+    for(let i=a.length-1;i>0;i--){
+      const j=Math.floor(Math.random()*(i+1));
+      [a[i],a[j]]=[a[j],a[i]];
     }
-    return arr;
+    return a;
   }
 
-  function updateHUD() {
-    const asked = qIndex + 1;
-    els.qNum.textContent = `${asked}/10`;
-    els.scoreInline.textContent = `${correct}/${asked}`;
-    els.climber.style.bottom = `${correct * 10}%`;
+  function start(m){
+    mode=m;
+    qIndex=0;
+    correct=0;
+    history=[];
+    locked=false;
+
+    els.overlay.style.display="none";
+    els.resultCard.classList.add("hidden");
+    els.gameCard.classList.remove("hidden");
+
+    build();
+    render();
   }
 
-  function buildRound() {
-    const pool = shuffle([...new Set(WORDS.map(w => String(w).trim()))]);
-    const picked = pool.slice(0, 10);
-
-    round = picked.map(word => {
-      const options = [word];
-      const distractors = shuffle(pool.filter(w => w !== word));
-
-      while (options.length < MODE[mode] && distractors.length) {
-        options.push(distractors.pop());
-      }
-
-      shuffle(options);
-
-      return {
-        word,
-        options,
-        answerIndex: options.indexOf(word),
-        def: "Definition loading…"
-      };
+  function build(){
+    const pool=shuffle([...new Set(WORDS)]);
+    round=pool.slice(0,10).map(w=>{
+      const opts=[w];
+      const d=shuffle(pool.filter(x=>x!==w));
+      while(opts.length<MODE[mode]) opts.push(d.pop());
+      shuffle(opts);
+      return {word:w,opts,ans:opts.indexOf(w)};
     });
   }
 
-  async function loadDefinition(q) {
-    try {
-      const r = await fetch(
-        `https://api.dictionaryapi.dev/api/v2/entries/en/${encodeURIComponent(q.word)}`
-      );
-      const d = await r.json();
-      const def = d?.[0]?.meanings?.[0]?.definitions?.[0]?.definition;
-      if (def && round[qIndex] === q) {
-        q.def = "Definition: " + def.replace(new RegExp(`\\b${q.word}\\b`, "ig"), "_____");
-        els.definition.textContent = q.def;
-      }
-    } catch {
-      if (round[qIndex] === q) {
-        els.definition.textContent = "Definition unavailable.";
-      }
-    }
-  }
-
-  function render() {
-    locked = false;
+  function render(){
+    locked=false;
+    els.choices.innerHTML="";
     document.activeElement && document.activeElement.blur();
-    els.choices.innerHTML = "";
 
-    updateHUD();
+    els.qNum.textContent=`${qIndex+1}/10`;
+    els.scoreInline.textContent=`${correct}/${qIndex+1}`;
+    els.climber.style.bottom=`${correct*10}%`;
 
-    const q = round[qIndex];
-    els.definition.textContent = q.def;
+    const q=round[qIndex];
+    els.definition.textContent="Loading definition…";
 
-    q.options.forEach((opt, i) => {
-      const b = document.createElement("button");
-      b.className = "choice";
-      b.innerHTML = `<b>${LETTERS[i]}.</b> ${opt}`;
-      b.onclick = () => pick(i);
+    q.opts.forEach((o,i)=>{
+      const b=document.createElement("button");
+      b.className="choice";
+      b.innerHTML=`<b>${LETTERS[i]}.</b> ${o}`;
+      b.onclick=()=>pick(i);
       els.choices.appendChild(b);
     });
 
-    loadDefinition(q);
+    loadDef(q);
   }
 
-  function pick(i) {
-    if (locked) return;
-    locked = true;
+  async function loadDef(q){
+    try{
+      const r=await fetch(`https://api.dictionaryapi.dev/api/v2/entries/en/${q.word}`);
+      const d=await r.json();
+      const def=d?.[0]?.meanings?.[0]?.definitions?.[0]?.definition;
+      els.definition.textContent=def
+        ? def.replace(new RegExp(`\\b${q.word}\\b`,"ig"),"_____")
+        : "Definition unavailable.";
+    }catch{
+      els.definition.textContent="Definition unavailable.";
+    }
+  }
 
-    const q = round[qIndex];
-    const ok = i === q.answerIndex;
-    if (ok) correct++;
+  function pick(i){
+    if(locked) return;
+    locked=true;
 
-    history.push({
-      def: q.def,
-      correct: q.word,
-      picked: q.options[i],
-      ok
-    });
+    const q=round[qIndex];
+    const ok=i===q.ans;
+    if(ok) correct++;
 
-    updateHUD();
+    history.push({q, picked:q.opts[i], ok});
 
-    setTimeout(() => {
+    setTimeout(()=>{
       qIndex++;
-      if (qIndex >= 10) showResults();
+      if(qIndex>=10) results();
       else render();
-    }, 150);
+    },150);
   }
 
-  function showResults() {
+  function results(){
     els.gameCard.classList.add("hidden");
     els.resultCard.classList.remove("hidden");
 
-    els.scoreOut.textContent = correct;
-    els.pctOut.textContent = Math.round((correct / 10) * 100);
+    els.scoreOut.textContent=correct;
+    els.pctOut.textContent=Math.round(correct/10*100);
 
-    els.recap.innerHTML = history.map((h, i) => `
-      <div class="recapItem">
-        <div class="muted"><b>Q${i + 1}:</b> ${h.def}</div>
-        <div>
-          <b>Correct:</b> ${h.correct} |
-          <b>You:</b> ${h.picked}
-          <span class="${h.ok ? "ok" : "bad"}">
-            ${h.ok ? "✔" : "✖"}
-          </span>
-        </div>
+    els.recap.innerHTML=history.map((h,i)=>`
+      <div>
+        Q${i+1}: <b>${h.q.word}</b> → ${h.picked}
+        <span class="${h.ok?"ok":"bad"}">${h.ok?"✔":"✖"}</span>
       </div>
     `).join("");
   }
 
-  function start(selected) {
-    mode = selected;
-    qIndex = 0;
-    correct = 0;
-    history = [];
-    locked = false;
+  els.mEasy.onclick=()=>start("easy");
+  els.mMedium.onclick=()=>start("medium");
+  els.mHard.onclick=()=>start("hard");
+  els.mExtreme.onclick=()=>start("extreme");
 
-    els.overlay.style.display = "none";
-    els.gameCard.classList.remove("hidden");
-    els.resultCard.classList.add("hidden");
-
-    buildRound();
-    render();
-  }
-
-  // ✅ Difficulty buttons — now guaranteed to work
-  els.mEasy.onclick = () => start("easy");
-  els.mMedium.onclick = () => start("medium");
-  els.mHard.onclick = () => start("hard");
-  els.mExtreme.onclick = () => start("extreme");
-
-  els.nextBtn.onclick = () => start(mode);
-
-  els.restartBtn.onclick = () => {
-    els.overlay.style.display = "flex";
+  els.restartBtn.onclick=()=>{
+    els.overlay.style.display="flex";
     els.gameCard.classList.add("hidden");
     els.resultCard.classList.add("hidden");
   };
-
-  // Initial state
-  els.overlay.style.display = "flex";
-  els.gameCard.classList.add("hidden");
-  els.resultCard.classList.add("hidden");
 
 });
