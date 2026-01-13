@@ -1,4 +1,5 @@
-(() => {
+document.addEventListener("DOMContentLoaded", () => {
+
   const WORDS = window.VOCAB_WORDS || window.WORDS || [];
   const LETTERS = "abcdefghij".split("");
 
@@ -25,12 +26,6 @@
     nextBtn: document.getElementById("nextBtn"),
     restartBtn: document.getElementById("restartBtn"),
   };
-
-  // --- HARD GUARD: stop if modal buttons not found ---
-  if (!els.mEasy || !els.mMedium || !els.mHard || !els.mExtreme) {
-    console.error("Difficulty buttons not found in DOM.");
-    return;
-  }
 
   const MODE = { easy: 3, medium: 5, hard: 6, extreme: 10 };
 
@@ -170,17 +165,15 @@
     history = [];
     locked = false;
 
-    // ONLY hide overlay here
     els.overlay.style.display = "none";
-
-    els.resultCard.classList.add("hidden");
     els.gameCard.classList.remove("hidden");
+    els.resultCard.classList.add("hidden");
 
     buildRound();
     render();
   }
 
-  // === BUTTON WIRING (THIS IS THE FIX) ===
+  // ✅ Difficulty buttons — now guaranteed to work
   els.mEasy.onclick = () => start("easy");
   els.mMedium.onclick = () => start("medium");
   els.mHard.onclick = () => start("hard");
@@ -194,8 +187,9 @@
     els.resultCard.classList.add("hidden");
   };
 
-  // === INITIAL STATE ===
+  // Initial state
   els.overlay.style.display = "flex";
   els.gameCard.classList.add("hidden");
   els.resultCard.classList.add("hidden");
-})();
+
+});
