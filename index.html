@@ -16,17 +16,8 @@
       color:#eef1ff;
     }
 
-    h1{
-      margin:0;
-      font-size:26px;
-      font-weight:800;
-    }
-
-    .sub{
-      font-size:13px;
-      opacity:.8;
-      margin-top:4px;
-    }
+    h1{ margin:0; font-size:26px; font-weight:800; }
+    .sub{ font-size:13px; opacity:.8; margin-top:4px; }
 
     .card{
       background: rgba(255,255,255,.06);
@@ -43,9 +34,7 @@
       gap:12px;
     }
 
-    .prompt{
-      padding:10px;
-    }
+    .prompt{ padding:10px; }
 
     .row{
       display:flex;
@@ -54,10 +43,7 @@
       gap:8px;
     }
 
-    .qnum{
-      font-weight:700;
-      opacity:.9;
-    }
+    .qnum{ font-weight:700; opacity:.9; }
 
     .pill{
       padding:6px 10px;
@@ -105,7 +91,7 @@
     .ladder{
       position:relative;
       width:80px;
-      height:260px;
+      height:240px;
       border-left:2px solid rgba(255,255,255,.25);
       border-right:2px solid rgba(255,255,255,.25);
     }
@@ -122,19 +108,14 @@
       position:absolute;
       left:50%;
       transform:translateX(-50%);
-      font-size:22px;
+      font-size:20px;
+      bottom:0;
     }
 
-    .loadingPill{
-      margin-top:10px;
-      display:flex;
-      align-items:center;
-      gap:6px;
-    }
-
+    .loadingPill{ margin-top:10px; }
     .hidden{ display:none; }
 
-    /* ===== Difficulty modal (uniform + transparent) ===== */
+    /* ===== Difficulty modal ===== */
     .overlay{
       position:fixed;
       inset:0;
@@ -151,7 +132,6 @@
       border:1px solid rgba(160,160,190,.45);
       background: rgba(18,18,24,.94);
       backdrop-filter: blur(12px);
-      box-shadow:0 26px 70px rgba(0,0,0,.48);
       padding:18px;
       text-align:center;
     }
@@ -162,10 +142,7 @@
       font-weight:900;
     }
 
-    .modal .muted{
-      opacity:.8;
-      font-size:13px;
-    }
+    .modal .muted{ opacity:.8; font-size:13px; }
 
     .diffBtns{
       display:grid;
@@ -190,7 +167,6 @@
       background: rgba(255,255,255,.06);
     }
 
-    /* ===== Responsive fixes ===== */
     @media (max-width: 880px){
       .top{ grid-template-columns:1fr; }
     }
@@ -199,8 +175,7 @@
       body{ padding:12px; }
       .definition{ font-size:18px; }
       button.choice{ font-size:17px; padding:12px; }
-      .ladder{ height:220px; }
-      .climber{ font-size:20px; }
+      .ladder{ height:210px; }
       .sub{ font-size:12px; }
       .diffBtns{ grid-template-columns:1fr; }
     }
@@ -209,63 +184,57 @@
 
 <body>
 
-  <h1>GRE Vocab Ladder Quiz</h1>
-  <div class="sub">GRE Vocabulary Practice</div>
+<h1>GRE Vocab Ladder Quiz</h1>
+<div class="sub">GRE Vocabulary Practice</div>
 
-  <div class="card top">
+<div class="card top">
 
-    <!-- Question area -->
-    <div class="prompt">
-      <div class="row">
-        <div class="qnum" id="qNum">Question 1</div>
-        <span class="pill" id="scoreInline">Correct: 0/10</span>
-      </div>
-
-      <div class="definition" id="definition">
-        Definition will appear here
-      </div>
-
-      <div class="choices" id="choices"></div>
-
-      <div class="loadingPill hidden" id="loadingPill">
-        <span id="loadingText">Loading…</span>
-      </div>
+  <div class="prompt">
+    <div class="row">
+      <div class="qnum" id="qNum">Question 1</div>
+      <span class="pill" id="scoreInline">Correct: 0/10</span>
     </div>
 
-    <!-- Ladder -->
-    <div class="ladderWrap">
-      <div class="ladder" id="ladder">
-        <div class="rung" style="bottom:10%"></div>
-        <div class="rung" style="bottom:20%"></div>
-        <div class="rung" style="bottom:30%"></div>
-        <div class="rung" style="bottom:40%"></div>
-        <div class="rung" style="bottom:50%"></div>
-        <div class="rung" style="bottom:60%"></div>
-        <div class="rung" style="bottom:70%"></div>
-        <div class="rung" style="bottom:80%"></div>
-        <div class="rung" style="bottom:90%"></div>
+    <div class="definition" id="definition">Definition will appear here</div>
+    <div class="choices" id="choices"></div>
 
-        <div class="climber" id="climber" style="bottom:0">▲</div>
-      </div>
-    </div>
-
-  </div>
-
-  <!-- Difficulty Modal -->
-  <div class="overlay" id="overlay">
-    <div class="modal">
-      <h2>Select Difficulty</h2>
-      <div class="diffBtns">
-        <button id="mEasy" type="button">Easy <span class="muted">(3 options)</span></button>
-        <button id="mMedium" type="button">Medium <span class="muted">(5 options)</span></button>
-        <button id="mHard" type="button">Hard <span class="muted">(6 options)</span></button>
-        <button id="mExtreme" type="button">Extreme <span class="muted">(10 options)</span></button>
-      </div>
+    <div class="loadingPill hidden" id="loadingPill">
+      <span id="loadingText">Loading…</span>
     </div>
   </div>
 
-  <script src="words.js"></script>
-  <script src="app.js"></script>
+  <div class="ladderWrap">
+    <div class="ladder" id="ladder">
+      <div class="rung" style="bottom:10%"></div>
+      <div class="rung" style="bottom:20%"></div>
+      <div class="rung" style="bottom:30%"></div>
+      <div class="rung" style="bottom:40%"></div>
+      <div class="rung" style="bottom:50%"></div>
+      <div class="rung" style="bottom:60%"></div>
+      <div class="rung" style="bottom:70%"></div>
+      <div class="rung" style="bottom:80%"></div>
+      <div class="rung" style="bottom:90%"></div>
+      <div class="climber" id="climber">▲</div>
+    </div>
+  </div>
+
+</div>
+
+<!-- Difficulty Modal -->
+<div class="overlay" id="difficultyOverlay">
+  <div class="modal">
+    <h2>Select Difficulty</h2>
+    <div class="diffBtns">
+      <button id="mEasy">Easy (3 options)</button>
+      <button id="mMedium">Medium (5 options)</button>
+      <button id="mHard">Hard (6 options)</button>
+      <button id="mExtreme">Extreme (10 options)</button>
+    </div>
+  </div>
+</div>
+
+<script src="words.js"></script>
+<script src="app.js"></script>
 
 </body>
 </html>
