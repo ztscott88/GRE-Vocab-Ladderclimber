@@ -1,15 +1,10 @@
-// app.js — fixes review list to ALWAYS use most recent attempt
-// Key behavior:
-// - Round increments ONLY on Next 10
-// - Retry = same exact 10 defs (order can change; distractors can change)
-// - attemptInRound increments on Retry
-// - Review wrong+flagged builds from the LATEST attempt, not cached from attempt 1
+// app.js — works with your exact index.html
+// Fix: Review wrong + flagged ALWAYS uses the MOST RECENT attempt (after Retry / Next 10)
 
 document.addEventListener("DOMContentLoaded", () => {
   const TOTAL = 10;
   const LETTERS = "abcdefghij".split("");
   const WORDS = Array.isArray(window.VOCAB_WORDS) ? window.VOCAB_WORDS : [];
-
   const MODE = { easy: 3, medium: 5, hard: 6, extreme: 10 };
 
   const els = {
@@ -34,7 +29,8 @@ document.addEventListener("DOMContentLoaded", () => {
     choices: document.getElementById("choices"),
 
     flagBtn: document.getElementById("flagBtn"),
-    skipBtn: document.getElementById("skipBtn"), // optional
+    skipBtn: document.getElementById("skipBtn"),
+
     skier: document.getElementById("skier"),
     raceTrack: document.getElementById("raceTrack"),
 
@@ -42,16 +38,16 @@ document.addEventListener("DOMContentLoaded", () => {
     pctOut: document.getElementById("pctOut"),
     totalOut: document.getElementById("totalOut"),
     recap: document.getElementById("recap"),
+
     medalOut: document.getElementById("medalOut"),
     resultRoundTitle: document.getElementById("resultRoundTitle"),
     roundsHistory: document.getElementById("roundsHistory"),
 
     retryBtn: document.getElementById("retryBtn"),
     nextBtn: document.getElementById("nextBtn"),
+    reviewWrongBtn: document.getElementById("reviewWrongBtn"),
+    reviewLast50Btn: document.getElementById("reviewLast50Btn"),
     restartBtn: document.getElementById("restartBtn"),
-
-    reviewWrongBtn: document.getElementById("reviewWrongBtn"),   // optional if you have it
-    reviewLast50Btn: document.getElementById("reviewLast50Btn"), // optional if you have it
   };
 
   if (!els.overlay || !els.gameCard || !els.resultCard || !els.definition || !els.choices) {
@@ -59,39 +55,7 @@ document.addEventListener("DOMContentLoaded", () => {
     return;
   }
 
-  // ---------- State ----------
-  let mode = "medium";
-
-  let roundNumber = 1;
-  let attemptInRound = 1; // increments on Retry; resets on Next 10
-
-  // timer
-  let timeLimit = 0; // 0 = OFF
-  let timeLeft = 0;
-  let timerId = null;
-
-  // gameplay
-  let qIndex = 0;
-  let correct = 0;
-  let locked = false;
-  let isBuilding = false;
-
-  let round = [];          // current questions array [{word, def, opts, ans}]
-  let history = [];        // current attempt history
-  let flaggedSet = new Set();
-
-  // “same definitions” backing store for current round
-  let baseRoundWords = null; // 10 correct words for this round (fixed across retries)
-  let baseRoundDefs = null;  // 10 defs for those words (fixed across retries)
-
-  // store attempt histories per round
-  // roundsAttempts[roundNumber] = [{ attempt: 1, history: [...] }, { attempt: 2, history: [...] }]
-  const roundsAttempts = {};
-
-  // store last 50 items (definition + correct) for your “review last 50” idea
-  const last50 = []; // push { def, correct }
-
-  // ---------- Helpers ----------
+  // ---------- helpers ----------
   function shuffle(a) {
     for (let i = a.length - 1; i > 0; i--) {
       const j = Math.floor(Math.random() * (i + 1));
@@ -133,6 +97,49 @@ document.addEventListener("DOMContentLoaded", () => {
     }
   }
 
+  function medalForPct(pct) {
+    if (pct >= 90) return "🥇 Gold medal";
+    if (pct >= 70) return "🥈 Silver medal";
+    if (pct >= 50) return "🥉 Bronze medal";
+    return "🏁 Finish";
+  }
+
+  function show(el) { el && el.classList.remove("hidden"); }
+  function hide(el) { el && el.classList.add("hidden"); }
+
+  // ---------- state ----------
+  let mode = "medium";
+
+  let roundNumber = 1;
+  let attemptNumber = 1; // increments on Retry, resets on Next 10
+
+  // timer
+  let timeLimit = 0; // 0=OFF
+  let timeLeft = 0;
+  let timerId = null;
+
+  // round content
+  let baseWords = null; // fixed 10 correct words for the round
+  let baseDefs = null;  // fixed 10 defs aligned with baseWords
+
+  // gameplay
+  let qIndex = 0;
+  let correct = 0;
+  let locked = false;
+  let isBuilding = false;
+
+  let round = [];    // [{word, def, opts, ans}]
+  let history = [];  // this attempt history
+  let flaggedSet = new Set();
+
+  // attempts store:
+  // roundsAttempts[roundNumber] = [{attempt, history, baseWords, baseDefs}]
+  const roundsAttempts = {};
+
+  // last 50
+  const last50 = []; // [{word, def}]
+
+  // ---------- timer ----------
   function stopTimer() {
     if (timerId) {
       clearInterval(timerId);
@@ -144,15 +151,15 @@ document.addEventListener("DOMContentLoaded", () => {
     stopTimer();
     if (timeLimit <= 0) {
       timeLeft = 0;
-      if (els.timer) els.timer.textContent = "OFF";
+      els.timer.textContent = "OFF";
       return;
     }
     timeLeft = timeLimit;
-    if (els.timer) els.timer.textContent = `${timeLeft}s`;
+    els.timer.textContent = `${timeLeft}s`;
 
     timerId = setInterval(() => {
       timeLeft--;
-      if (els.timer) els.timer.textContent = `${Math.max(0, timeLeft)}s`;
+      els.timer.textContent = `${Math.max(0, timeLeft)}s`;
       if (timeLeft <= 0) {
         stopTimer();
         endGameDueToTime();
@@ -164,23 +171,25 @@ document.addEventListener("DOMContentLoaded", () => {
     const v = String(val);
     timeLimit = v === "off" ? 0 : Math.max(0, parseInt(v, 10) || 0);
 
-    if (els.timeChoice) els.timeChoice.value = v === "0" ? "off" : v;
+    // sync dropdown
+    if (els.timeChoice) els.timeChoice.value = timeLimit <= 0 ? "off" : String(timeLimit);
 
-    if (els.timerBtns.length) {
-      els.timerBtns.forEach((b) => b.classList.remove("timerSelected"));
-      const key = timeLimit <= 0 ? "off" : String(timeLimit);
-      const match = els.timerBtns.find((b) => String(b.dataset.time) === key);
-      if (match) match.classList.add("timerSelected");
-    }
+    // sync buttons
+    els.timerBtns.forEach((b) => b.classList.remove("timerSelected"));
+    const key = timeLimit <= 0 ? "off" : String(timeLimit);
+    const match = els.timerBtns.find((b) => String(b.dataset.time) === key);
+    if (match) match.classList.add("timerSelected");
   }
 
+  // ---------- race ----------
   function updateRaceProgress(answeredCount) {
     if (!els.skier || !els.raceTrack) return;
 
     const min = 10;
     const max = els.raceTrack.clientWidth - 10;
-    const pct = Math.max(0, Math.min(1, answeredCount / TOTAL));
+    const pct = Math.max(0, Math.min(1, answeredCount / (round.length || TOTAL)));
     const x = min + (max - min) * pct;
+
     els.skier.style.left = `${x}px`;
 
     const cps = els.raceTrack.querySelectorAll(".checkpoint");
@@ -192,16 +201,19 @@ document.addEventListener("DOMContentLoaded", () => {
   }
 
   function updateHUD() {
-    const asked = Math.min(qIndex + 1, TOTAL);
+    const total = round.length || TOTAL;
+    const asked = Math.min(qIndex + 1, total);
     const answered = history.length;
 
-    if (els.roundPill) els.roundPill.textContent = `Round ${roundNumber} · Try ${attemptInRound}`;
-    if (els.qNum) els.qNum.textContent = `Question ${asked}/${TOTAL}`;
-    if (els.scoreInline) els.scoreInline.textContent = `Correct ${correct}/${answered || 0}`;
-    if (els.timer) els.timer.textContent = timeLimit > 0 ? `${timeLeft}s` : "OFF";
+    els.roundPill.textContent = `Round ${roundNumber} · Try ${attemptNumber}`;
+    els.qNum.textContent = `Question ${asked}/${total}`;
+    els.scoreInline.textContent = `Correct ${correct}/${answered || 0}`;
+    els.timer.textContent = timeLimit > 0 ? `${timeLeft}s` : "OFF";
+
     updateRaceProgress(qIndex);
   }
 
+  // ---------- build round ----------
   function buildOptionsForWord(correctWord, pool, count) {
     const opts = [correctWord];
     const distractors = shuffle(pool.filter((w) => w !== correctWord));
@@ -212,81 +224,69 @@ document.addEventListener("DOMContentLoaded", () => {
   async function buildBaseRoundNew() {
     const pool = uniqWords(WORDS);
     shuffle(pool);
-    const words10 = pool.slice(0, TOTAL);
-    const defs10 = await Promise.all(words10.map((w) => fetchDef(w)));
-
-    baseRoundWords = [...words10];
-    baseRoundDefs = [...defs10];
+    baseWords = pool.slice(0, TOTAL);
+    baseDefs = await Promise.all(baseWords.map((w) => fetchDef(w)));
   }
 
-  // Build the playable round from base words/defs
   function buildPlayableRoundFromBase() {
     const pool = uniqWords(WORDS);
     const order = shuffle([...Array(TOTAL).keys()]);
+
     round = order.map((idx) => {
-      const word = baseRoundWords[idx];
-      const def = baseRoundDefs[idx] || "Definition unavailable.";
+      const word = baseWords[idx];
+      const def = baseDefs[idx] || "Definition unavailable.";
       const opts = buildOptionsForWord(word, pool, MODE[mode]);
       return { word, def, opts, ans: opts.indexOf(word) };
     });
   }
 
-  // Build a REVIEW round from a list of base items (word+def fixed)
   function buildReviewRoundFromItems(items) {
     const pool = uniqWords(WORDS);
     const chosen = items.slice(0, TOTAL);
     const order = shuffle([...Array(chosen.length).keys()]);
-
-    round = order.map((idx) => {
-      const item = chosen[idx];
+    round = order.map((i) => {
+      const item = chosen[i];
       const opts = buildOptionsForWord(item.word, pool, MODE[mode]);
       return { word: item.word, def: item.def, opts, ans: opts.indexOf(item.word) };
     });
-
-    // If fewer than 10, we’ll just have fewer questions
-    // (but you can also fill to 10—see function below)
   }
 
   function fillToTenFromBase(items) {
     const filled = [...items];
-    if (!baseRoundWords || !baseRoundDefs) return filled;
-
-    // add any from base round not already present until 10
-    const key = new Set(filled.map((x) => x.word.toLowerCase()));
-    for (let i = 0; i < baseRoundWords.length && filled.length < TOTAL; i++) {
-      const w = baseRoundWords[i];
-      if (!key.has(w.toLowerCase())) {
-        filled.push({ word: w, def: baseRoundDefs[i] });
-        key.add(w.toLowerCase());
-      }
+    const have = new Set(filled.map((x) => x.word.toLowerCase()));
+    for (let i = 0; i < baseWords.length && filled.length < TOTAL; i++) {
+      const w = baseWords[i];
+      const k = w.toLowerCase();
+      if (have.has(k)) continue;
+      filled.push({ word: w, def: baseDefs[i] });
+      have.add(k);
     }
     return filled.slice(0, TOTAL);
   }
 
-  function recordAttemptHistory() {
+  // ---------- logging (this is what fixes your review issue) ----------
+  function saveAttempt() {
     if (!roundsAttempts[roundNumber]) roundsAttempts[roundNumber] = [];
-    // replace if this attempt already exists
-    const idx = roundsAttempts[roundNumber].findIndex((x) => x.attempt === attemptInRound);
-    const payload = { attempt: attemptInRound, history: [...history] };
+
+    const payload = {
+      attempt: attemptNumber,
+      history: [...history],
+      baseWords: baseWords ? [...baseWords] : null,
+      baseDefs: baseDefs ? [...baseDefs] : null,
+    };
+
+    const idx = roundsAttempts[roundNumber].findIndex((x) => x.attempt === attemptNumber);
     if (idx >= 0) roundsAttempts[roundNumber][idx] = payload;
     else roundsAttempts[roundNumber].push(payload);
   }
 
-  function getLatestAttemptHistory(roundNum) {
+  function getLatestAttempt(roundNum) {
     const arr = roundsAttempts[roundNum] || [];
     if (!arr.length) return null;
-    // latest by highest attempt
-    return arr.reduce((a, b) => (b.attempt > a.attempt ? b : a));
+    return arr.reduce((best, cur) => (cur.attempt > best.attempt ? cur : best), arr[0]);
   }
 
-  function medalForPct(pct) {
-    if (pct >= 90) return "🥇 Gold medal";
-    if (pct >= 70) return "🥈 Silver medal";
-    if (pct >= 50) return "🥉 Bronze medal";
-    return "🏁 Finish";
-  }
-
-  // ---------- Gameplay ----------
+  // ---------- gameplay ----------
   function render() {
     locked = false;
     els.choices.innerHTML = "";
@@ -317,8 +317,7 @@ document.addEventListener("DOMContentLoaded", () => {
       skipped: !!meta.skipped,
     });
 
-    // last50 memory for marketing/competence building
-    last50.push({ def: q.def, correct: q.word });
+    last50.push({ word: q.word, def: q.def });
     if (last50.length > 50) last50.shift();
   }
 
@@ -334,20 +333,17 @@ document.addEventListener("DOMContentLoaded", () => {
     pushHistory(q, picked, ok, { flagged: flaggedSet.has(qIndex) });
 
     els.choices.innerHTML = "";
-
     qIndex++;
     updateRaceProgress(qIndex);
 
-    if (qIndex >= round.length) { // review rounds may be < 10
+    if (qIndex >= round.length) {
       stopTimer();
       showResults(false);
       return;
     }
-
     setTimeout(render, 110);
   }
 
-  // Flag = auto-skip (requested)
   function flagAndSkip() {
     if (locked) return;
     locked = true;
@@ -366,7 +362,6 @@ document.addEventListener("DOMContentLoaded", () => {
       showResults(false);
       return;
     }
-
     setTimeout(render, 90);
   }
 
@@ -386,7 +381,6 @@ document.addEventListener("DOMContentLoaded", () => {
       showResults(false);
       return;
     }
-
     setTimeout(render, 90);
   }
 
@@ -399,33 +393,31 @@ document.addEventListener("DOMContentLoaded", () => {
   function showResults(endedByTime) {
     stopTimer();
 
-    // store attempt history so review always uses latest
-    recordAttemptHistory();
+    // SAVE this attempt BEFORE showing buttons (critical)
+    saveAttempt();
 
-    els.gameCard.classList.add("hidden");
-    els.resultCard.classList.remove("hidden");
+    hide(els.gameCard);
+    show(els.resultCard);
 
-    const answered = history.length;
-    const pct = round.length ? Math.round((correct / round.length) * 100) : 0;
+    const total = round.length || TOTAL;
+    const pct = total ? Math.round((correct / total) * 100) : 0;
 
-    if (els.totalOut) els.totalOut.textContent = String(round.length || TOTAL);
-    if (els.scoreOut) els.scoreOut.textContent = String(correct);
-    if (els.pctOut) els.pctOut.textContent = String(pct);
+    els.totalOut.textContent = String(total);
+    els.scoreOut.textContent = String(correct);
+    els.pctOut.textContent = String(pct);
 
-    if (els.resultRoundTitle) {
-      els.resultRoundTitle.textContent = endedByTime
-        ? `Round ${roundNumber} · Try ${attemptInRound} (Time’s up)`
-        : `Round ${roundNumber} · Try ${attemptInRound} complete`;
-    }
+    els.resultRoundTitle.textContent = endedByTime
+      ? `Round ${roundNumber} · Try ${attemptNumber} (Time’s up)`
+      : `Round ${roundNumber} · Try ${attemptNumber} complete`;
 
-    if (els.medalOut) els.medalOut.textContent = medalForPct(pct);
+    els.medalOut.textContent = medalForPct(pct);
 
-    if (els.roundsHistory) {
-      const latest = getLatestAttemptHistory(roundNumber);
-      els.roundsHistory.textContent = latest
-        ? `Latest: Round ${roundNumber} Try ${latest.attempt}`
-        : "";
-    }
+    const latest = getLatestAttempt(roundNumber);
+    els.roundsHistory.textContent = latest ? `Latest attempt: Try ${latest.attempt}` : "";
+
+    // show review buttons
+    els.reviewWrongBtn.classList.remove("hidden");
+    els.reviewLast50Btn.classList.remove("hidden");
 
     const header = endedByTime
       ? `<div style="margin:10px 0; font-weight:900;">Time’s up! Here’s your recap:</div>`
@@ -435,7 +427,6 @@ document.addEventListener("DOMContentLoaded", () => {
       const qLabel = `Q${idx + 1}.`;
       const youClass = h.ok ? "ok" : "bad";
       const mark = h.ok ? "✔" : "✖";
-
       return `
         <div style="margin: 0 0 12px;">
           <div class="muted"><b>${qLabel} Definition:</b><br>${h.def}</div>
@@ -450,19 +441,11 @@ document.addEventListener("DOMContentLoaded", () => {
       `;
     });
 
-    els.recap.innerHTML =
-      header +
-      items.join("") +
-      (endedByTime && answered < round.length
-        ? `<div class="muted" style="margin-top:10px;">You answered ${answered} of ${round.length} questions.</div>`
-        : ``);
-
-    // If you have review buttons in HTML, show them
-    if (els.reviewWrongBtn) els.reviewWrongBtn.classList.remove("hidden");
-    if (els.reviewLast50Btn) els.reviewLast50Btn.classList.remove("hidden");
+    els.recap.innerHTML = header + items.join("");
   }
 
-  async function startGame({ selectedMode, newBaseRound = false, isRetry = false } = {}) {
+  // ---------- start modes ----------
+  async function startNormalGame({ selectedMode, newBaseRound } = {}) {
     if (isBuilding) return;
     isBuilding = true;
 
@@ -474,19 +457,17 @@ document.addEventListener("DOMContentLoaded", () => {
     history = [];
     locked = false;
 
-    els.overlay.style.display = "none";
-    els.resultCard.classList.add("hidden");
-    els.gameCard.classList.remove("hidden");
+    hide(els.resultCard);
+    show(els.gameCard);
 
     els.definition.textContent = "Definition: Loading…";
     els.choices.innerHTML = "";
     updateRaceProgress(0);
 
     try {
-      if (newBaseRound || !baseRoundWords || !baseRoundDefs) {
+      if (newBaseRound || !baseWords || !baseDefs) {
         await buildBaseRoundNew();
       }
-      // Retry uses same base words/defs, but can reshuffle order and distractors
       buildPlayableRoundFromBase();
     } finally {
       isBuilding = false;
@@ -496,57 +477,67 @@ document.addEventListener("DOMContentLoaded", () => {
     render();
   }
 
-  // Review wrong+flagged from latest attempt
   function startReviewWrongFlaggedLatest() {
-    const latest = getLatestAttemptHistory(roundNumber);
-    if (!latest) return;
+    const latest = getLatestAttempt(roundNumber);
+    if (!latest || !latest.history || !latest.history.length) return;
 
-    const wrongOrFlagged = latest.history.filter((h) => !h.ok || h.flagged || h.skipped);
-    // Convert to unique items based on correct word
+    // restore base round (so fillToTen is correct)
+    if (latest.baseWords && latest.baseDefs) {
+      baseWords = [...latest.baseWords];
+      baseDefs = [...latest.baseDefs];
+    }
+
+    // this is the FIX: build from latest.history (latest attempt), not current history
+    const bad = latest.history.filter((h) => !h.ok || h.flagged || h.skipped);
+
     const seen = new Set();
     const items = [];
-    for (const h of wrongOrFlagged) {
+    for (const h of bad) {
       const k = h.correct.toLowerCase();
       if (seen.has(k)) continue;
       seen.add(k);
       items.push({ word: h.correct, def: h.def });
     }
 
-    // Fill to 10 from base round so it still feels like a “round”
     const filled = fillToTenFromBase(items);
 
-    // Start a review run (does not affect roundNumber/attempt)
+    // review run (does not change round/attempt)
+    stopTimer();
+    timeLimit = 0;
+    timeLeft = 0;
+    els.timer.textContent = "OFF";
+
     flaggedSet = new Set();
     qIndex = 0;
     correct = 0;
     history = [];
     locked = false;
 
-    els.resultCard.classList.add("hidden");
-    els.gameCard.classList.remove("hidden");
-
-    stopTimer(); // optional: keep timer OFF for review
-    if (els.timer) els.timer.textContent = "OFF";
+    hide(els.resultCard);
+    show(els.gameCard);
 
     buildReviewRoundFromItems(filled);
+    updateRaceProgress(0);
     render();
   }
 
-  // Review last 50 defs (simple)
   function startReviewLast50() {
     if (!last50.length) return;
 
     const items = [];
     const seen = new Set();
-
-    // take most recent 50, but cap to 10 questions at a time
     for (let i = last50.length - 1; i >= 0 && items.length < TOTAL; i--) {
       const it = last50[i];
-      const k = it.correct.toLowerCase();
+      const k = it.word.toLowerCase();
       if (seen.has(k)) continue;
       seen.add(k);
-      items.push({ word: it.correct, def: it.def });
+      items.push({ word: it.word, def: it.def });
     }
+
+    stopTimer();
+    timeLimit = 0;
+    timeLeft = 0;
+    els.timer.textContent = "OFF";
 
     flaggedSet = new Set();
     qIndex = 0;
@@ -554,17 +545,15 @@ document.addEventListener("DOMContentLoaded", () => {
     history = [];
     locked = false;
 
-    els.resultCard.classList.add("hidden");
-    els.gameCard.classList.remove("hidden");
-
-    stopTimer();
-    if (els.timer) els.timer.textContent = "OFF";
+    hide(els.resultCard);
+    show(els.gameCard);
 
     buildReviewRoundFromItems(items);
+    updateRaceProgress(0);
     render();
   }
 
-  // ---------- Wiring ----------
+  // ---------- wiring ----------
   function wireTimerUI() {
     els.timerBtns.forEach((btn) => {
       btn.addEventListener("click", () => setTimerChoice(btn.dataset.time));
@@ -574,70 +563,66 @@ document.addEventListener("DOMContentLoaded", () => {
       els.timeChoice.addEventListener("change", (e) => setTimerChoice(e.target.value));
     }
 
-    // default OFF
     setTimerChoice("off");
   }
 
   function wireDifficultyButtons() {
-    els.mEasy && (els.mEasy.onclick = () => {
-      attemptInRound = 1;
-      startGame({ selectedMode: "easy", newBaseRound: true });
-    });
-    els.mMedium && (els.mMedium.onclick = () => {
-      attemptInRound = 1;
-      startGame({ selectedMode: "medium", newBaseRound: true });
-    });
-    els.mHard && (els.mHard.onclick = () => {
-      attemptInRound = 1;
-      startGame({ selectedMode: "hard", newBaseRound: true });
-    });
-    els.mExtreme && (els.mExtreme.onclick = () => {
-      attemptInRound = 1;
-      startGame({ selectedMode: "extreme", newBaseRound: true });
-    });
-  }
-
-  if (els.flagBtn) els.flagBtn.onclick = flagAndSkip;
-
-  // optional skip support
-  if (els.skipBtn) els.skipBtn.onclick = skipOnly;
-
-  if (els.retryBtn) {
-    els.retryBtn.onclick = () => {
-      // Retry keeps same base words/defs, increments attempt only
-      attemptInRound += 1;
-      startGame({ selectedMode: mode, newBaseRound: false, isRetry: true });
+    els.mEasy.onclick = () => {
+      attemptNumber = 1;
+      startNormalGame({ selectedMode: "easy", newBaseRound: true });
+      els.overlay.style.display = "none";
+    };
+    els.mMedium.onclick = () => {
+      attemptNumber = 1;
+      startNormalGame({ selectedMode: "medium", newBaseRound: true });
+      els.overlay.style.display = "none";
+    };
+    els.mHard.onclick = () => {
+      attemptNumber = 1;
+      startNormalGame({ selectedMode: "hard", newBaseRound: true });
+      els.overlay.style.display = "none";
+    };
+    els.mExtreme.onclick = () => {
+      attemptNumber = 1;
+      startNormalGame({ selectedMode: "extreme", newBaseRound: true });
+      els.overlay.style.display = "none";
     };
   }
 
-  if (els.nextBtn) {
-    els.nextBtn.onclick = () => {
-      // Next 10 => new base round, increment round, reset attempt
-      roundNumber += 1;
-      attemptInRound = 1;
-      startGame({ selectedMode: mode, newBaseRound: true });
-    };
-  }
+  els.flagBtn && (els.flagBtn.onclick = flagAndSkip);
+  els.skipBtn && (els.skipBtn.onclick = skipOnly);
 
-  if (els.restartBtn) {
-    els.restartBtn.onclick = () => {
-      if (isBuilding) return;
-      stopTimer();
-      els.overlay.style.display = "flex";
-      els.gameCard.classList.add("hidden");
-      els.resultCard.classList.add("hidden");
-    };
-  }
+  els.retryBtn && (els.retryBtn.onclick = () => {
+    attemptNumber += 1;
+    startNormalGame({ selectedMode: mode, newBaseRound: false });
+  });
 
-  // Review buttons (if present)
-  if (els.reviewWrongBtn) els.reviewWrongBtn.onclick = startReviewWrongFlaggedLatest;
-  if (els.reviewLast50Btn) els.reviewLast50Btn.onclick = startReviewLast50;
+  els.nextBtn && (els.nextBtn.onclick = () => {
+    roundNumber += 1;
+    attemptNumber = 1;
+    startNormalGame({ selectedMode: mode, newBaseRound: true });
+  });
 
-  // ---------- Init ----------
+  els.reviewWrongBtn && (els.reviewWrongBtn.onclick = startReviewWrongFlaggedLatest);
+  els.reviewLast50Btn && (els.reviewLast50Btn.onclick = startReviewLast50);
+
+  els.restartBtn && (els.restartBtn.onclick = () => {
+    if (isBuilding) return;
+    stopTimer();
+    els.overlay.style.display = "flex";
+    hide(els.gameCard);
+    hide(els.resultCard);
+  });
+
+  // ---------- init ----------
   wireTimerUI();
   wireDifficultyButtons();
 
   els.overlay.style.display = "flex";
-  els.gameCard.classList.add("hidden");
-  els.resultCard.classList.add("hidden");
+  hide(els.gameCard);
+  hide(els.resultCard);
+
+  if (!WORDS.length) {
+    console.warn("VOCAB_WORDS is empty. Make sure words.js loads before app.js.");
+  }
 });
