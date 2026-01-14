@@ -9,9 +9,7 @@
       --bg0:#050a16;
       --bg1:#071027;
       --card:rgba(255,255,255,.06);
-      --card2:rgba(255,255,255,.08);
       --stroke:rgba(255,255,255,.14);
-      --stroke2:rgba(255,255,255,.22);
       --text:#eaf0ff;
       --muted:rgba(234,240,255,.72);
       --good:#2ee57a;
@@ -19,9 +17,8 @@
       --pill:rgba(255,255,255,.07);
       --shadow:0 18px 60px rgba(0,0,0,.45);
       --radius:22px;
-      --radius2:16px;
       --pad:18px;
-      --gap:12px;
+      --gap:10px;
       --maxw:720px;
     }
     *{ box-sizing:border-box; }
@@ -40,23 +37,21 @@
       width:100%;
       max-width: var(--maxw);
       margin: 0 auto;
-      padding: 18px 14px 30px;
+      padding: 14px 12px 28px;
     }
 
-    header{
-      margin: 8px 0 14px;
-    }
+    header{ margin: 6px 0 12px; }
     h1{
       margin:0;
-      font-size: clamp(26px, 5.2vw, 44px);
+      font-size: clamp(24px, 6vw, 42px);
       letter-spacing:.2px;
       line-height:1.05;
-      font-weight: 900;
+      font-weight: 950;
     }
     .sub{
       margin-top:6px;
       color: var(--muted);
-      font-weight: 650;
+      font-weight: 700;
     }
 
     .card{
@@ -68,35 +63,37 @@
       overflow:hidden;
       backdrop-filter: blur(10px);
     }
-
     .hidden{ display:none !important; }
 
+    /* HUD */
     .hud{
       display:grid;
       grid-template-columns: 1fr 1fr;
       gap: var(--gap);
       align-items:center;
-      margin-bottom: 12px;
+      margin-bottom: 10px;
     }
     .pill{
       display:inline-flex;
       align-items:center;
       justify-content:center;
       gap:8px;
-      padding: 10px 14px;
+      padding: 10px 12px;
       border-radius: 999px;
       background: var(--pill);
       border: 1px solid var(--stroke);
       color: var(--text);
-      font-weight: 800;
+      font-weight: 900;
       line-height:1;
-      min-height: 40px;
+      min-height: 38px;
       white-space: nowrap;
+      font-size: 14px;
     }
     .pill.right{ justify-self:end; }
 
+    /* Track */
     .trackBox{
-      margin: 10px 0 14px;
+      margin: 10px 0 12px;
       padding: 12px;
       border-radius: 18px;
       background: rgba(255,255,255,.06);
@@ -104,7 +101,7 @@
     }
     .raceTrack{
       position:relative;
-      height: 58px;
+      height: 54px;
       border-radius: 16px;
       background: rgba(0,0,0,.18);
       border: 1px solid var(--stroke);
@@ -122,7 +119,7 @@
       justify-content: space-between;
       align-items:center;
       pointer-events:none;
-      opacity:.9;
+      opacity:.95;
     }
     .checkpoint{
       width:10px;
@@ -133,7 +130,7 @@
       transition: background .15s ease, transform .15s ease;
     }
     .checkpoint.hit{
-      background: rgba(46,229,122,.9);
+      background: rgba(46,229,122,.92);
       transform: scale(1.07);
     }
     .skier{
@@ -141,7 +138,7 @@
       left: 10px;
       top: 50%;
       transform: translateY(-50%);
-      font-size: 26px;
+      font-size: 24px;
       transition: left .18s ease;
       filter: drop-shadow(0 6px 10px rgba(0,0,0,.35));
       user-select:none;
@@ -151,29 +148,28 @@
       right: 10px;
       top: 50%;
       transform: translateY(-50%);
-      font-size: 22px;
+      font-size: 20px;
       opacity:.95;
       user-select:none;
     }
 
+    /* Question */
     .definitionText{
-      font-size: clamp(18px, 3.6vw, 26px);
-      font-weight: 850;
+      font-size: clamp(18px, 4.4vw, 26px);
+      font-weight: 900;
       line-height:1.22;
-      margin: 10px 0 14px;
+      margin: 10px 0 12px;
       padding: 14px;
       border-radius: 18px;
       background: rgba(0,0,0,.18);
       border: 1px solid var(--stroke);
     }
-
     .choices{
       display:grid;
       grid-template-columns: 1fr;
-      gap: 12px;
+      gap: 10px;
       margin-top: 6px;
     }
-
     .choice{
       width:100%;
       text-align:left;
@@ -182,8 +178,8 @@
       border: 1px solid rgba(255,255,255,.12);
       background: rgba(0,0,0,.32);
       color: var(--text);
-      font-size: 20px;
-      font-weight: 800;
+      font-size: 18px;
+      font-weight: 900;
       letter-spacing:.2px;
       cursor:pointer;
       -webkit-tap-highlight-color: transparent;
@@ -199,55 +195,36 @@
     .actions{
       display:flex;
       gap: 12px;
-      margin-top: 14px;
+      margin-top: 12px;
       flex-wrap: wrap;
     }
-
     .btn{
       appearance:none;
       border:none;
       cursor:pointer;
       border-radius: 16px;
       padding: 12px 14px;
-      font-weight: 900;
+      font-weight: 950;
       font-size: 16px;
       color: var(--text);
       background: rgba(255,255,255,.07);
       border: 1px solid var(--stroke);
       -webkit-tap-highlight-color: transparent;
+      width: 100%;
     }
     .btn:active{ transform: scale(.99); }
-
     .btn.primary{
       background: rgba(120,140,255,.18);
       border-color: rgba(120,140,255,.35);
     }
-    .btn.danger{
-      background: rgba(255,91,91,.12);
-      border-color: rgba(255,91,91,.28);
-    }
 
-    .flag.on{
-      background: rgba(255,195,0,.12);
-      border-color: rgba(255,195,0,.30);
-    }
-
-    .muted{ color: var(--muted); }
-
-    .ok{ color: var(--good); font-weight: 900; }
-    .bad{ color: var(--bad); font-weight: 900; }
+    .muted{ color: var(--muted); font-weight: 750; }
+    .ok{ color: var(--good); font-weight: 950; }
+    .bad{ color: var(--bad); font-weight: 950; }
 
     /* Results */
-    .resultTop{
-      display:flex;
-      align-items:flex-start;
-      justify-content: space-between;
-      gap: 14px;
-      flex-wrap: wrap;
-      margin-bottom: 10px;
-    }
     .bigScore{
-      font-size: 26px;
+      font-size: 24px;
       font-weight: 950;
       margin: 0;
     }
@@ -257,18 +234,25 @@
       margin-top: 6px;
     }
     .recap{
-      margin-top: 14px;
+      margin-top: 12px;
       padding: 12px;
       border-radius: 18px;
       border: 1px solid var(--stroke);
       background: rgba(0,0,0,.16);
     }
+    .recapItem{
+      padding: 10px 10px;
+      border-radius: 14px;
+      border: 1px solid rgba(255,255,255,.10);
+      background: rgba(255,255,255,.04);
+      margin-bottom: 10px;
+    }
 
     .resultBtns{
       display:grid;
       grid-template-columns: 1fr;
-      gap: 12px;
-      margin-top: 14px;
+      gap: 10px;
+      margin-top: 12px;
     }
 
     /* Overlay */
@@ -301,24 +285,18 @@
     .modal p{
       margin: 0 0 14px;
       color: var(--muted);
-      font-weight: 650;
+      font-weight: 700;
     }
     .grid2{
       display:grid;
       grid-template-columns: 1fr 1fr;
       gap: 10px;
     }
-    .selectRow{
-      display:grid;
-      grid-template-columns: 1fr;
-      gap: 8px;
+    .label{
+      font-weight: 950;
+      opacity:.95;
       margin-top: 12px;
     }
-    .label{
-      font-weight: 900;
-      opacity:.95;
-    }
-
     .difficultyBtn{
       width:100%;
       padding: 14px 14px;
@@ -338,6 +316,7 @@
       gap: 10px;
       flex-wrap: wrap;
       align-items:center;
+      margin-top: 8px;
     }
     .timerBtn{
       padding: 10px 12px;
@@ -345,31 +324,22 @@
       border: 1px solid rgba(255,255,255,.20);
       background: rgba(255,255,255,.06);
       color: var(--text);
-      font-weight: 900;
+      font-weight: 950;
       cursor:pointer;
       -webkit-tap-highlight-color: transparent;
+      flex: 1;
+      min-width: 90px;
+      text-align:center;
     }
     .timerBtn.timerSelected{
       background: rgba(120,140,255,.18);
       border-color: rgba(120,140,255,.42);
     }
-    select{
-      width:100%;
-      padding: 12px 12px;
-      border-radius: 14px;
-      background: rgba(255,255,255,.06);
-      border: 1px solid rgba(255,255,255,.18);
-      color: var(--text);
-      font-weight: 850;
-      outline: none;
-    }
+    select{ display:none; } /* we keep #timeChoice for JS but hide it */
 
-    /* Mobile tuning */
-    @media (max-width:520px){
-      .hud{ grid-template-columns: 1fr 1fr; }
-      .pill{ padding: 10px 12px; font-size: 14px; min-height: 38px; }
-      .choice{ font-size: 18px; }
-      .definitionText{ padding: 12px; }
+    @media (max-width:420px){
+      .timerBtn{ min-width: 78px; padding: 10px 10px; }
+      .modal{ padding: 16px; }
       .card{ padding: 14px; }
     }
   </style>
@@ -384,7 +354,7 @@
     <!-- GAME -->
     <section id="gameCard" class="card hidden">
       <div class="hud">
-        <div id="roundPill" class="pill">Round 1</div>
+        <div id="roundPill" class="pill">Round 1 · Try 1</div>
         <div id="qNum" class="pill right">Question 1/10</div>
 
         <div id="scoreInline" class="pill">Correct 0/0</div>
@@ -409,37 +379,33 @@
         </div>
       </div>
 
-      <!-- REQUIRED by app.js -->
       <div id="definition" class="definitionText">Definition will appear here</div>
       <div id="choices" class="choices"></div>
 
       <div class="actions">
-        <button id="flagBtn" class="btn flag" type="button">🚩 Not sure</button>
-        <button id="skipBtn" class="btn danger" type="button">Skip</button>
+        <button id="flagBtn" class="btn primary" type="button">🚩 Not sure (flags + skips)</button>
       </div>
     </section>
 
     <!-- RESULTS -->
     <section id="resultCard" class="card hidden">
-      <div class="resultTop">
-        <div>
-          <div id="resultRoundTitle" class="muted" style="font-weight:950;">Round Results</div>
-          <p class="bigScore">
-            Score: <span id="scoreOut">0</span>/<span id="totalOut">10</span>
-            (<span id="pctOut">0</span>%)
-          </p>
-          <div id="medalOut" class="medal">🏁 Finish</div>
-          <div id="roundsHistory" class="muted" style="margin-top:8px;"></div>
-        </div>
-      </div>
+      <div class="muted" id="resultRoundTitle" style="font-weight:950;">Round Results</div>
+
+      <p class="bigScore">
+        Score: <span id="scoreOut">0</span>/<span id="totalOut">10</span>
+        (<span id="pctOut">0</span>%)
+      </p>
+
+      <div id="medalOut" class="medal">🏁 Finish</div>
+      <div id="roundsHistory" class="muted" style="margin-top:8px;"></div>
 
       <div id="recap" class="recap"></div>
 
       <div class="resultBtns">
-        <button id="retryBtn" class="btn primary" type="button">Retry (same definitions)</button>
-        <button id="nextBtn" class="btn" type="button">Next 10</button>
-        <button id="reviewWrongBtn" class="btn hidden" type="button">Review wrong + flagged</button>
-        <button id="reviewLast50Btn" class="btn hidden" type="button">Review last 50</button>
+        <button id="reviewWrongBtn" class="btn primary" type="button">Review wrong + flagged (this try)</button>
+        <button id="retryBtn" class="btn" type="button">Retry full 10 (same definitions)</button>
+        <button id="nextBtn" class="btn" type="button">Next 10 (new round)</button>
+        <button id="reviewLast50Btn" class="btn" type="button">Review last 50 (rolling)</button>
         <button id="restartBtn" class="btn" type="button">Change difficulty / time</button>
       </div>
     </section>
@@ -459,34 +425,31 @@
         <button id="mExtreme" class="difficultyBtn" type="button">Extreme (10 choices)</button>
       </div>
 
-      <div class="selectRow">
-        <div class="label">Timer</div>
-
-        <!-- Visual buttons (app.js reads these via data-time and writes into #timeChoice) -->
-        <div class="timerWrap">
-          <button class="timerBtn timerSelected" type="button" data-time="off">OFF</button>
-          <button class="timerBtn" type="button" data-time="60">60s</button>
-          <button class="timerBtn" type="button" data-time="90">90s</button>
-          <button class="timerBtn" type="button" data-time="120">120s</button>
-        </div>
-
-        <!-- app.js expects this element id; keep it even if you use buttons -->
-        <select id="timeChoice" aria-label="Timer choice">
-          <option value="off" selected>OFF</option>
-          <option value="60">60 seconds</option>
-          <option value="90">90 seconds</option>
-          <option value="120">120 seconds</option>
-        </select>
+      <div class="label">Timer</div>
+      <div class="timerWrap">
+        <button class="timerBtn timerSelected" type="button" data-time="off">OFF</button>
+        <button class="timerBtn" type="button" data-time="60">60s</button>
+        <button class="timerBtn" type="button" data-time="90">90s</button>
+        <button class="timerBtn" type="button" data-time="120">120s</button>
       </div>
 
+      <!-- app.js uses this id; hidden but required -->
+      <select id="timeChoice" aria-label="Timer choice">
+        <option value="off" selected>OFF</option>
+        <option value="60">60</option>
+        <option value="90">90</option>
+        <option value="120">120</option>
+      </select>
+
       <p class="muted" style="margin-top:14px;margin-bottom:0;">
-        Tip: “Not sure” flags the item so it can show up in Review modes later.
+        Tip: “Not sure” automatically flags the item and moves you on.
       </p>
     </div>
   </div>
 
-  <!-- IMPORTANT: words.js MUST load before app.js -->
+  <!-- IMPORTANT ORDER -->
   <script src="./words.js"></script>
+  <script src="./defs.js"></script>
   <script src="./app.js"></script>
 </body>
 </html>
