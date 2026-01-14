@@ -1,7 +1,7 @@
 document.addEventListener("DOMContentLoaded", () => {
   const DEFAULT_TOTAL = 10;
-  const MISSED_UNLOCK_ROUNDS = 5;
-  const MISSED_REVIEW_TOTAL = 50;
+  const LAST50_UNLOCK_ROUNDS = 5; // 5 normal rounds = 50 questions
+  const LAST50_SIZE = 50;
 
   const LETTERS = "abcdefghij".split("");
   const MODE = { easy: 3, medium: 5, hard: 6, extreme: 10 };
@@ -11,6 +11,7 @@ document.addEventListener("DOMContentLoaded", () => {
     gameCard: document.getElementById("gameCard"),
     resultCard: document.getElementById("resultCard"),
 
+    roundPill: document.getElementById("roundPill"),
     qNum: document.getElementById("qNum"),
     scoreInline: document.getElementById("scoreInline"),
     timer: document.getElementById("timer"),
@@ -18,9 +19,14 @@ document.addEventListener("DOMContentLoaded", () => {
     definition: document.getElementById("definition"),
     choices: document.getElementById("choices"),
 
+    flagBtn: document.getElementById("flagBtn"),
+    skipBtn: document.getElementById("skipBtn"),
+
     skier: document.getElementById("skier"),
     raceTrack: document.getElementById("raceTrack"),
 
+    resultRoundTitle: document.getElementById("resultRoundTitle"),
+    medalOut: document.getElementById("medalOut"),
     scoreOut: document.getElementById("scoreOut"),
     totalOut: document.getElementById("totalOut"),
     pctOut: document.getElementById("pctOut"),
@@ -28,8 +34,10 @@ document.addEventListener("DOMContentLoaded", () => {
 
     retryBtn: document.getElementById("retryBtn"),
     nextBtn: document.getElementById("nextBtn"),
-    missedBtn: document.getElementById("missedBtn"),
+    reviewWrongBtn: document.getElementById("reviewWrongBtn"),
+    reviewLast50Btn: document.getElementById("reviewLast50Btn"),
     restartBtn: document.getElementById("restartBtn"),
+    roundsHistory: document.getElementById("roundsHistory"),
 
     mEasy: document.getElementById("mEasy"),
     mMedium: document.getElementById("mMedium"),
@@ -55,14 +63,13 @@ document.addEventListener("DOMContentLoaded", () => {
     return /^definition\s*:/i.test(replaced) ? replaced : `Definition: ${replaced}`;
   }
 
-  // ---------- Find vocab list (robust) ----------
-  // Tries common names, then scans window for largest array that looks like vocab.
+  // ---------- Vocab detection ----------
   function detectRawVocab() {
-    const candidates = [
+    const direct = [
       window.VOCAB_WORDS, window.WORDS, window.VOCAB, window.GRE_WORDS, window.GREG_WORDS
     ].filter(Boolean);
 
-    for (const c of candidates) {
+    for (const c of direct) {
       if (Array.isArray(c) && c.length) return c;
     }
 
@@ -73,20 +80,17 @@ document.addEventListener("DOMContentLoaded", () => {
       try {
         const v = window[k];
         if (!Array.isArray(v) || v.length < 50) continue;
-
         const sample = v[0];
         const ok =
           typeof sample === "string" ||
           (Array.isArray(sample) && sample.length >= 1) ||
           (sample && typeof sample === "object");
-
         if (ok && v.length > bestLen) {
           best = v;
           bestLen = v.length;
         }
       } catch {}
     }
-
     return best || [];
   }
 
@@ -100,11 +104,7 @@ document.addEventListener("DOMContentLoaded", () => {
       const key = word.toLowerCase();
       if (seen.has(key)) return;
       seen.add(key);
-
-      out.push({
-        word,
-        def: sanitizeDefinition(d, word) // may be ""
-      });
+      out.push({ word, def: sanitizeDefinition(d, word) });
     };
 
     for (const item of raw) {
@@ -118,19 +118,28 @@ document.addEventListener("DOMContentLoaded", () => {
         push(w, d);
       }
     }
-
     return out;
   }
 
   const RAW = detectRawVocab();
   const VOCAB = normalizeVocab(RAW);
 
-  // If definitions not present in words.js, use dictionary API (cached)
-  const defCache = new Map(); // wordLower -> "Definition: ..."
+  function ensureVocabLoadedOrShowError() {
+    if (VOCAB.length >= 10) return true;
+    els.overlay.style.display = "none";
+    els.gameCard.classList.remove("hidden");
+    els.definition.textContent =
+      "Error: word list not loaded. Make sure words.js is in the same folder and sets a vocab array.";
+    els.choices.innerHTML = "";
+    return false;
+  }
+
+  // ---------- Definition cache (pins definitions for Retry) ----------
+  const defCache = new Map(); // wordLower -> defExact
+
   async function fetchDefinition(word) {
     const key = word.toLowerCase();
     if (defCache.has(key)) return defCache.get(key);
-
     try {
       const r = await fetch(`https://api.dictionaryapi.dev/api/v2/entries/en/${encodeURIComponent(word)}`);
       const d = await r.json();
@@ -145,38 +154,33 @@ document.addEventListener("DOMContentLoaded", () => {
     }
   }
 
-  function ensureVocabLoadedOrShowError() {
-    if (VOCAB.length >= 10) return true;
-    els.overlay.style.display = "none";
-    els.gameCard.classList.remove("hidden");
-    els.definition.textContent =
-      "Error: word list not loaded. Make sure words.js is in the same folder and sets a vocab array.";
-    els.choices.innerHTML = "";
-    return false;
-  }
-
   // ---------- State ----------
   let mode = "medium";
   let total = DEFAULT_TOTAL;
+
+  let roundNumber = 1;
+  const roundsLog = []; // {round, score, total, pct, medal}
 
   let qIndex = 0;
   let correct = 0;
   let locked = false;
 
-  // round: [{word, def, opts, ans}]
-  let round = [];
-  let history = [];
+  let round = [];   // [{word, def, opts, ans}]
+  let history = []; // [{def, correct, picked, ok, flagged}]
 
-  // Retry: EXACT word->definition must stay identical
   let lastBase = null; // [{word, defExact}]
   let lastMode = "medium";
   let lastTotal = DEFAULT_TOTAL;
 
-  // Missed system (across normal rounds)
-  let roundsPlayed = 0;
-  const missedSet = new Set(); // lower words
+  const missedSet = new Set();
+  const flaggedSet = new Set();
 
-  // Timer
+  const last50Queue = []; // [{word, defExact}]
+  let normalRoundsCompleted = 0;
+
+  let currentFlagged = false;
+
+  // ---------- Timer ----------
   let timerEnabled = false;
   let timeLimit = 60;
   let timeLeft = 0;
@@ -219,6 +223,7 @@ document.addEventListener("DOMContentLoaded", () => {
     }, 1000);
   }
 
+  // ---------- UI helpers ----------
   function updateRaceProgress(answered) {
     const pct = Math.max(0, Math.min(1, answered / total));
     const min = 10;
@@ -234,19 +239,33 @@ document.addEventListener("DOMContentLoaded", () => {
 
   function updateHUD() {
     const asked = Math.min(qIndex + 1, total);
+    els.roundPill.textContent = `Round ${roundNumber}`;
     els.qNum.textContent = `Question ${asked}/${total}`;
     els.scoreInline.textContent = `Correct ${correct}/${asked}`;
     els.timer.textContent = timerEnabled ? `${timeLeft}s` : "OFF";
     updateRaceProgress(qIndex);
   }
 
-  // ---------- Build round with EXACT defs ----------
+  function medalForPct(pct) {
+    if (pct >= 80) return { icon: "🥇", name: "Gold" };
+    if (pct >= 60) return { icon: "🥈", name: "Silver" };
+    if (pct >= 40) return { icon: "🥉", name: "Bronze" };
+    return { icon: "🏁", name: "Finish" };
+  }
+
+  function renderRoundsLog() {
+    if (!els.roundsHistory) return;
+    if (!roundsLog.length) { els.roundsHistory.textContent = ""; return; }
+    const recent = roundsLog.slice(-6).map(r =>
+      `Round ${r.round}: ${r.medal.icon} ${r.medal.name} (${r.score}/${r.total})`
+    );
+    els.roundsHistory.textContent = "Recent rounds: " + recent.join(" • ");
+  }
+
+  // ---------- Round building ----------
   function randomBase(count) {
     const pool = shuffle([...VOCAB]);
-    return pool.slice(0, count).map(v => ({
-      word: v.word,
-      defExact: v.def || "" // may be empty -> will be fetched once and then pinned
-    }));
+    return pool.slice(0, count).map(v => ({ word: v.word, defExact: v.def || "" }));
   }
 
   function distractors(correctWord, n) {
@@ -256,23 +275,14 @@ document.addEventListener("DOMContentLoaded", () => {
 
   async function buildRoundFromBase(base) {
     const questions = [];
-
     for (const item of base) {
       const word = item.word;
 
-      // PIN definition: if base has defExact use it; else use cache; else fetch and cache once
       let defExact = item.defExact || defCache.get(word.toLowerCase()) || "";
+      if (!defExact) defExact = await fetchDefinition(word);
+      defExact = sanitizeDefinition(defExact, word) || defExact;
+      defCache.set(word.toLowerCase(), defExact);
 
-      if (!defExact) {
-        defExact = await fetchDefinition(word);
-      } else {
-        // ensure labeled + sanitized
-        defExact = sanitizeDefinition(defExact, word) || defExact;
-      }
-
-      defCache.set(word.toLowerCase(), defExact); // pin for retry
-
-      // options can change every time
       const optCount = MODE[mode];
       const opts = [word, ...distractors(word, optCount - 1)];
       shuffle(opts);
@@ -284,14 +294,26 @@ document.addEventListener("DOMContentLoaded", () => {
         ans: opts.findIndex(o => o.toLowerCase() === word.toLowerCase())
       });
     }
-
     return questions;
   }
 
-  // ---------- Render ----------
+  // ---------- Last 50 tracking ----------
+  function pushToLast50(word, defExact) {
+    last50Queue.push({ word, defExact });
+    while (last50Queue.length > LAST50_SIZE) last50Queue.shift();
+  }
+
+  // ---------- Rendering ----------
+  function setFlagUI(on) {
+    currentFlagged = !!on;
+    if (currentFlagged) els.flagBtn.classList.add("on");
+    else els.flagBtn.classList.remove("on");
+  }
+
   function renderQuestion() {
     locked = false;
     els.choices.innerHTML = "";
+    setFlagUI(false);
 
     updateHUD();
 
@@ -308,6 +330,9 @@ document.addEventListener("DOMContentLoaded", () => {
     });
   }
 
+  function recordFlag(word) { flaggedSet.add(word.toLowerCase()); }
+  function recordMiss(word) { missedSet.add(word.toLowerCase()); }
+
   function chooseAnswer(i) {
     if (locked) return;
     locked = true;
@@ -315,20 +340,21 @@ document.addEventListener("DOMContentLoaded", () => {
     const q = round[qIndex];
     const ok = i === q.ans;
 
-    if (ok) correct++;
-    else missedSet.add(q.word.toLowerCase());
+    if (currentFlagged) recordFlag(q.word);
+    if (ok) correct++; else recordMiss(q.word);
 
     history.push({
       def: q.def,
       correct: q.word,
       picked: q.opts[i],
-      ok
+      ok,
+      flagged: currentFlagged
     });
 
-    // move next
+    if (total === DEFAULT_TOTAL) pushToLast50(q.word, q.def);
+
     qIndex++;
 
-    // clear focus so “last letter highlight” doesn’t carry
     els.choices.querySelectorAll("button").forEach(b => b.blur());
     els.choices.innerHTML = "";
 
@@ -336,7 +362,36 @@ document.addEventListener("DOMContentLoaded", () => {
       endGame(false);
       return;
     }
+    setTimeout(renderQuestion, 120);
+  }
 
+  function skipQuestion() {
+    if (locked) return;
+    locked = true;
+
+    const q = round[qIndex];
+    recordFlag(q.word);
+    recordMiss(q.word);
+
+    history.push({
+      def: q.def,
+      correct: q.word,
+      picked: "SKIPPED",
+      ok: false,
+      flagged: true
+    });
+
+    if (total === DEFAULT_TOTAL) pushToLast50(q.word, q.def);
+
+    qIndex++;
+
+    els.choices.querySelectorAll("button").forEach(b => b.blur());
+    els.choices.innerHTML = "";
+
+    if (qIndex >= total) {
+      endGame(false);
+      return;
+    }
     setTimeout(renderQuestion, 120);
   }
 
@@ -352,22 +407,26 @@ document.addEventListener("DOMContentLoaded", () => {
 
     qIndex = 0;
     correct = 0;
-    locked = false;
     history = [];
+    locked = false;
     updateRaceProgress(0);
 
     els.overlay.style.display = "none";
     els.resultCard.classList.add("hidden");
     els.gameCard.classList.remove("hidden");
-    els.missedBtn.classList.add("hidden");
 
     els.definition.textContent = "Loading definitions…";
     els.choices.innerHTML = "";
 
-    let base = baseOverride ? baseOverride.map(x => ({ word: x.word, defExact: x.defExact })) : randomBase(total);
+    els.reviewWrongBtn.classList.add("hidden");
+    els.reviewLast50Btn.classList.add("hidden");
+
+    let base = baseOverride
+      ? baseOverride.map(x => ({ word: x.word, defExact: x.defExact }))
+      : randomBase(total);
+
     if (shuffleOrder) base = shuffle(base);
 
-    // Save for retry (defs pinned)
     lastBase = base.map(x => ({
       word: x.word,
       defExact: defCache.get(x.word.toLowerCase()) || x.defExact || ""
@@ -387,9 +446,15 @@ document.addEventListener("DOMContentLoaded", () => {
     els.gameCard.classList.add("hidden");
     els.resultCard.classList.remove("hidden");
 
+    const pct = Math.round((correct / total) * 100);
+    const medal = medalForPct(pct);
+
+    els.resultRoundTitle.textContent = `Round ${roundNumber} Results`;
+    els.medalOut.textContent = `${medal.icon} ${medal.name} Medal`;
+
     els.scoreOut.textContent = String(correct);
     els.totalOut.textContent = String(total);
-    els.pctOut.textContent = String(Math.round((correct / total) * 100));
+    els.pctOut.textContent = String(pct);
 
     const header = endedByTime
       ? `<div style="margin:10px 0;font-weight:800;">Time’s up. Recap:</div>`
@@ -404,40 +469,45 @@ document.addEventListener("DOMContentLoaded", () => {
             <b>Correct:</b> <span class="ok">${h.correct}</span>
             &nbsp;|&nbsp;
             <b>You:</b> <span class="${h.ok ? "ok" : "bad"}">${h.picked}</span>
+            ${h.flagged ? `<span class="muted" style="margin-left:8px;">(flagged)</span>` : ""}
             <span class="${h.ok ? "ok" : "bad"}" style="margin-left:6px;">${h.ok ? "✔" : "✖"}</span>
           </div>
         </div>
       `).join("");
 
-    if (total === DEFAULT_TOTAL) roundsPlayed++;
+    roundsLog.push({ round: roundNumber, score: correct, total, pct, medal });
+    renderRoundsLog();
 
-    const unlock = roundsPlayed >= MISSED_UNLOCK_ROUNDS && missedSet.size > 0 && total === DEFAULT_TOTAL;
-    if (unlock) {
-      els.missedBtn.classList.remove("hidden");
-      els.missedBtn.textContent = `Practice Missed (${MISSED_REVIEW_TOTAL})`;
-    }
+    if (total === DEFAULT_TOTAL) normalRoundsCompleted++;
+
+    const wrongPlusFlaggedCount = new Set([...missedSet, ...flaggedSet]).size;
+    if (wrongPlusFlaggedCount > 0) els.reviewWrongBtn.classList.remove("hidden");
+
+    const last50Unlocked = normalRoundsCompleted >= LAST50_UNLOCK_ROUNDS && last50Queue.length >= LAST50_SIZE;
+    if (last50Unlocked) els.reviewLast50Btn.classList.remove("hidden");
+
+    roundNumber++;
   }
 
-  // ---------- Missed 50 ----------
-  function missedBase50() {
-    const missedWords = Array.from(missedSet);
-    const base = missedWords.map(wLower => {
+  // ---------- Review builders ----------
+  function buildReviewWrongFlagged() {
+    const set = new Set([...missedSet, ...flaggedSet]);
+    const list = Array.from(set);
+    const base = list.map(wLower => {
       const match = VOCAB.find(v => v.word.toLowerCase() === wLower);
       const word = match ? match.word : wLower;
       const defExact = defCache.get(wLower) || match?.def || "";
       return { word, defExact };
     });
-
-    if (base.length < MISSED_REVIEW_TOTAL) {
-      const need = MISSED_REVIEW_TOTAL - base.length;
-      const extra = shuffle([...VOCAB]).filter(v => !missedSet.has(v.word.toLowerCase()));
-      base.push(...extra.slice(0, need).map(v => ({ word: v.word, defExact: v.def || "" })));
-    }
-
-    return shuffle(base).slice(0, MISSED_REVIEW_TOTAL);
+    return shuffle(base);
   }
 
-  // ---------- Overlay timer selection ----------
+  function buildReviewLast50() {
+    return last50Queue.map(x => ({ word: x.word, defExact: x.defExact }));
+  }
+
+  // ---------- Wiring ----------
+  // Timer buttons
   document.querySelectorAll("[data-time]").forEach(btn => {
     btn.addEventListener("click", () => {
       document.querySelectorAll("[data-time]").forEach(b => b.classList.remove("timerSelected"));
@@ -446,13 +516,17 @@ document.addEventListener("DOMContentLoaded", () => {
     });
   });
 
-  // ---------- Difficulty buttons ----------
+  // In-question buttons
+  els.flagBtn.addEventListener("click", () => setFlagUI(!currentFlagged));
+  els.skipBtn.addEventListener("click", () => skipQuestion());
+
+  // Difficulty
   els.mEasy.addEventListener("click", () => startGame("easy"));
   els.mMedium.addEventListener("click", () => startGame("medium"));
   els.mHard.addEventListener("click", () => startGame("hard"));
   els.mExtreme.addEventListener("click", () => startGame("extreme"));
 
-  // Retry: SAME EXACT DEFS, ORDER MAY CHANGE, OPTIONS MAY CHANGE
+  // Retry: SAME DEFINITIONS, different order + different distractors ok
   els.retryBtn.addEventListener("click", () => {
     if (!lastBase) return;
     const baseForRetry = lastBase.map(x => ({
@@ -462,15 +536,21 @@ document.addEventListener("DOMContentLoaded", () => {
     startGame(lastMode, baseForRetry, lastTotal, true);
   });
 
-  // Next 10: new base
+  // Next 10
   els.nextBtn.addEventListener("click", () => startGame(mode, null, DEFAULT_TOTAL, false));
 
-  // Missed 50
-  els.missedBtn.addEventListener("click", () => {
-    const base = missedBase50();
-    startGame(mode, base, MISSED_REVIEW_TOTAL, false);
-    roundsPlayed = 0;
-    missedSet.clear();
+  // Review Wrong + Flagged
+  els.reviewWrongBtn.addEventListener("click", () => {
+    const base = buildReviewWrongFlagged();
+    if (!base.length) return;
+    startGame(mode, base, base.length, false);
+  });
+
+  // Review Last 50
+  els.reviewLast50Btn.addEventListener("click", () => {
+    const base = buildReviewLast50();
+    if (base.length < LAST50_SIZE) return;
+    startGame(mode, base, base.length, false);
   });
 
   // Change difficulty
