@@ -13,9 +13,13 @@ document.addEventListener("DOMContentLoaded", () => {
 
     qNum: document.getElementById("qNum"),
     scoreInline: document.getElementById("scoreInline"),
+    timer: document.getElementById("timer"),
+
     definition: document.getElementById("definition"),
     choices: document.getElementById("choices"),
-    climber: document.getElementById("climber"),
+
+    skier: document.getElementById("skier"),
+    raceTrack: document.getElementById("raceTrack"),
 
     scoreOut: document.getElementById("scoreOut"),
     pctOut: document.getElementById("pctOut"),
@@ -38,6 +42,11 @@ document.addEventListener("DOMContentLoaded", () => {
   let round = [];
   let history = [];
   let isBuilding = false;
+
+  // Timer
+  const TIME_LIMIT = 60; // seconds
+  let timeLeft = TIME_LIMIT;
+  let timerId = null;
 
   function shuffle(a){
     for(let i=a.length-1;i>0;i--){
@@ -71,8 +80,68 @@ document.addEventListener("DOMContentLoaded", () => {
     if (els.mExtreme) els.mExtreme.disabled = on;
   }
 
+  // --- Race progress: 0 start, 1-9 checkpoints, 10 finish
+  function updateRaceProgress(answeredCount){
+    if (!els.skier || !els.raceTrack) return;
+
+    // track padding (matches CSS: 10px)
+    const min = 10;
+    const max = els.raceTrack.clientWidth - 10;
+    const pct = Math.max(0, Math.min(1, answeredCount / TOTAL));
+    const x = min + (max - min) * pct;
+
+    els.skier.style.left = `${x}px`;
+
+    // hit checkpoints for 1..9
+    const cps = els.raceTrack.querySelectorAll(".checkpoint");
+    cps.forEach((cp, idx) => {
+      const cpNumber = idx + 1; // 1..9
+      if (answeredCount >= cpNumber) cp.classList.add("hit");
+      else cp.classList.remove("hit");
+    });
+  }
+
+  function updateHUD(){
+    const asked = Math.min(qIndex + 1, TOTAL);
+    els.qNum.textContent = `${asked}/${TOTAL}`;
+    els.scoreInline.textContent = `${correct}/${asked}`;
+    if (els.timer) els.timer.textContent = `${timeLeft}s`;
+
+    // progress based on questions answered so far (qIndex)
+    updateRaceProgress(qIndex);
+  }
+
+  function stopTimer(){
+    if (timerId) {
+      clearInterval(timerId);
+      timerId = null;
+    }
+  }
+
+  function startTimer(){
+    stopTimer();
+    timeLeft = TIME_LIMIT;
+    if (els.timer) els.timer.textContent = `${timeLeft}s`;
+
+    timerId = setInterval(() => {
+      timeLeft--;
+      if (els.timer) els.timer.textContent = `${timeLeft}s`;
+
+      if (timeLeft <= 0) {
+        stopTimer();
+        endGameDueToTime();
+      }
+    }, 1000);
+  }
+
+  function endGameDueToTime(){
+    // lock input and show results as-is
+    locked = true;
+    if (els.choices) els.choices.innerHTML = "";
+    showResults(true);
+  }
+
   async function start(selectedMode){
-    // prevent multiple overlapping builds (this breaks Next 10)
     if (isBuilding) return;
     isBuilding = true;
 
@@ -82,7 +151,9 @@ document.addEventListener("DOMContentLoaded", () => {
     history = [];
     locked = false;
 
-    // UI state
+    // reset race visuals
+    updateRaceProgress(0);
+
     els.overlay.style.display = "none";
     els.resultCard.classList.add("hidden");
     els.gameCard.classList.remove("hidden");
@@ -91,11 +162,9 @@ document.addEventListener("DOMContentLoaded", () => {
     els.choices.innerHTML = "";
     setButtonsLoading(true);
 
-    // Build round
     const pool = shuffle([...new Set(WORDS)]);
     const picked = pool.slice(0, TOTAL);
 
-    // prefetch defs for the 10 words
     const defs = await Promise.all(picked.map(w => fetchDef(w)));
 
     round = picked.map((word, idx) => {
@@ -115,13 +184,10 @@ document.addEventListener("DOMContentLoaded", () => {
     isBuilding = false;
     setButtonsLoading(false);
 
-    render();
-  }
+    // start 60-second countdown when the quiz is ready to play
+    startTimer();
 
-  function updateHUD(){
-    els.qNum.textContent = `${qIndex+1}/${TOTAL}`;
-    els.scoreInline.textContent = `${correct}/${qIndex+1}`;
-    els.climber.style.bottom = `${correct*10}%`;
+    render();
   }
 
   function render(){
@@ -162,31 +228,48 @@ document.addEventListener("DOMContentLoaded", () => {
     els.choices.innerHTML = "";
     qIndex++;
 
+    // move skier to next checkpoint immediately
+    updateRaceProgress(qIndex);
+
     if(qIndex >= TOTAL){
-      showResults();
+      stopTimer();
+      showResults(false);
       return;
     }
 
     setTimeout(render, 120);
   }
 
-  function showResults(){
+  function showResults(endedByTime){
+    stopTimer();
+
     els.gameCard.classList.add("hidden");
     els.resultCard.classList.remove("hidden");
 
     els.scoreOut.textContent = correct;
     els.pctOut.textContent = Math.round(correct / TOTAL * 100);
 
-    els.recap.innerHTML = history.map((h,i)=>`
-      <div style="margin-bottom:10px;">
-        <div class="muted"><b>Q${i+1} Definition:</b><br>${h.def}</div>
-        <div>
-          <b>Correct:</b> ${h.correct} |
-          <b>You:</b> ${h.picked}
-          <span class="${h.ok ? "ok" : "bad"}">${h.ok ? "✔" : "✖"}</span>
+    const header = endedByTime
+      ? `<div style="margin:10px 0; font-weight:800;">Time’s up! Here’s your recap:</div>`
+      : "";
+
+    els.recap.innerHTML =
+      header +
+      history.map((h,i)=>`
+        <div style="margin-bottom:10px;">
+          <div class="muted"><b>Q${i+1} Definition:</b><br>${h.def}</div>
+          <div>
+            <b>Correct:</b> ${h.correct} |
+            <b>You:</b> ${h.picked}
+            <span class="${h.ok ? "ok" : "bad"}">${h.ok ? "✔" : "✖"}</span>
+          </div>
         </div>
-      </div>
-    `).join("");
+      `).join("");
+
+    // If time ended early, also show how many you reached
+    if (endedByTime && history.length < TOTAL) {
+      els.recap.innerHTML += `<div style="opacity:.8; margin-top:10px;">You answered ${history.length} of ${TOTAL} questions.</div>`;
+    }
   }
 
   // Difficulty buttons
@@ -195,12 +278,13 @@ document.addEventListener("DOMContentLoaded", () => {
   els.mHard.onclick = () => start("hard");
   els.mExtreme.onclick = () => start("extreme");
 
-  // ✅ Next 10 fixed (always uses last mode, prevents overlap)
+  // Next 10 = same difficulty, new round, new timer
   els.nextBtn.onclick = () => start(mode);
 
   // Change difficulty
   els.restartBtn.onclick = () => {
     if (isBuilding) return;
+    stopTimer();
     els.overlay.style.display = "flex";
     els.gameCard.classList.add("hidden");
     els.resultCard.classList.add("hidden");
