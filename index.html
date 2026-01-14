@@ -1,273 +1,492 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
 <head>
-<meta charset="UTF-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>GRE Vocab Ladder Quiz</title>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
+  <title>GRE Vocab Ladder Quiz</title>
+  <style>
+    :root{
+      --bg0:#050a16;
+      --bg1:#071027;
+      --card:rgba(255,255,255,.06);
+      --card2:rgba(255,255,255,.08);
+      --stroke:rgba(255,255,255,.14);
+      --stroke2:rgba(255,255,255,.22);
+      --text:#eaf0ff;
+      --muted:rgba(234,240,255,.72);
+      --good:#2ee57a;
+      --bad:#ff5b5b;
+      --pill:rgba(255,255,255,.07);
+      --shadow:0 18px 60px rgba(0,0,0,.45);
+      --radius:22px;
+      --radius2:16px;
+      --pad:18px;
+      --gap:12px;
+      --maxw:720px;
+    }
+    *{ box-sizing:border-box; }
+    html,body{ height:100%; }
+    body{
+      margin:0;
+      font-family: system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif;
+      color:var(--text);
+      background:
+        radial-gradient(1200px 700px at 20% 0%, rgba(120,140,255,.14), transparent 55%),
+        radial-gradient(900px 600px at 90% 20%, rgba(0,255,200,.08), transparent 60%),
+        linear-gradient(180deg, var(--bg1), var(--bg0));
+    }
 
-<style>
-*{box-sizing:border-box}
-body{
-  margin:0;
-  padding:14px;
-  font-family:system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Arial,sans-serif;
-  background:#0b0f1e;
-  color:#eef1ff;
-}
-.hidden{display:none}
-h1{margin:0;font-size:26px;font-weight:800}
-.sub{font-size:13px;opacity:.8;margin-bottom:6px}
+    .wrap{
+      width:100%;
+      max-width: var(--maxw);
+      margin: 0 auto;
+      padding: 18px 14px 30px;
+    }
 
-.card{
-  background:rgba(255,255,255,.06);
-  border:1px solid rgba(255,255,255,.14);
-  border-radius:16px;
-  padding:14px;
-  margin-top:14px;
-}
+    header{
+      margin: 8px 0 14px;
+    }
+    h1{
+      margin:0;
+      font-size: clamp(26px, 5.2vw, 44px);
+      letter-spacing:.2px;
+      line-height:1.05;
+      font-weight: 900;
+    }
+    .sub{
+      margin-top:6px;
+      color: var(--muted);
+      font-weight: 650;
+    }
 
-.row{
-  display:flex;
-  justify-content:space-between;
-  align-items:center;
-  gap:10px;
-  flex-wrap:wrap;
-}
+    .card{
+      background: var(--card);
+      border: 1px solid var(--stroke);
+      border-radius: var(--radius);
+      box-shadow: var(--shadow);
+      padding: var(--pad);
+      overflow:hidden;
+      backdrop-filter: blur(10px);
+    }
 
-.pill{
-  font-weight:800;
-  padding:2px 10px;
-  border:1px solid rgba(255,255,255,.25);
-  border-radius:999px;
-}
+    .hidden{ display:none !important; }
 
-#timer{min-width:64px;text-align:center}
+    .hud{
+      display:grid;
+      grid-template-columns: 1fr 1fr;
+      gap: var(--gap);
+      align-items:center;
+      margin-bottom: 12px;
+    }
+    .pill{
+      display:inline-flex;
+      align-items:center;
+      justify-content:center;
+      gap:8px;
+      padding: 10px 14px;
+      border-radius: 999px;
+      background: var(--pill);
+      border: 1px solid var(--stroke);
+      color: var(--text);
+      font-weight: 800;
+      line-height:1;
+      min-height: 40px;
+      white-space: nowrap;
+    }
+    .pill.right{ justify-self:end; }
 
-.definition{
-  margin-top:10px;
-  font-size:18px;
-  min-height:52px;
-}
+    .trackBox{
+      margin: 10px 0 14px;
+      padding: 12px;
+      border-radius: 18px;
+      background: rgba(255,255,255,.06);
+      border: 1px solid var(--stroke);
+    }
+    .raceTrack{
+      position:relative;
+      height: 58px;
+      border-radius: 16px;
+      background: rgba(0,0,0,.18);
+      border: 1px solid var(--stroke);
+      display:flex;
+      align-items:center;
+      padding: 0 14px;
+      overflow:hidden;
+    }
+    .checkpoints{
+      position:absolute;
+      left:44px;
+      right:44px;
+      height: 12px;
+      display:flex;
+      justify-content: space-between;
+      align-items:center;
+      pointer-events:none;
+      opacity:.9;
+    }
+    .checkpoint{
+      width:10px;
+      height:10px;
+      border-radius:999px;
+      background: rgba(255,255,255,.22);
+      box-shadow: inset 0 0 0 1px rgba(255,255,255,.14);
+      transition: background .15s ease, transform .15s ease;
+    }
+    .checkpoint.hit{
+      background: rgba(46,229,122,.9);
+      transform: scale(1.07);
+    }
+    .skier{
+      position:absolute;
+      left: 10px;
+      top: 50%;
+      transform: translateY(-50%);
+      font-size: 26px;
+      transition: left .18s ease;
+      filter: drop-shadow(0 6px 10px rgba(0,0,0,.35));
+      user-select:none;
+    }
+    .finish{
+      position:absolute;
+      right: 10px;
+      top: 50%;
+      transform: translateY(-50%);
+      font-size: 22px;
+      opacity:.95;
+      user-select:none;
+    }
 
-.quickRow{
-  margin-top:10px;
-  display:flex;
-  gap:10px;
-  flex-wrap:wrap;
-}
+    .definitionText{
+      font-size: clamp(18px, 3.6vw, 26px);
+      font-weight: 850;
+      line-height:1.22;
+      margin: 10px 0 14px;
+      padding: 14px;
+      border-radius: 18px;
+      background: rgba(0,0,0,.18);
+      border: 1px solid var(--stroke);
+    }
 
-.smallBtn{
-  border:1px solid rgba(255,255,255,.28);
-  background:transparent;
-  color:#fff;
-  border-radius:10px;
-  padding:8px 10px;
-  cursor:pointer;
-  font-weight:800;
-}
-.smallBtn:hover{background:#1b1b1b}
-.smallBtn.on{
-  border-color:#4ade80;
-  box-shadow:0 0 0 2px rgba(74,222,128,.12);
-}
+    .choices{
+      display:grid;
+      grid-template-columns: 1fr;
+      gap: 12px;
+      margin-top: 6px;
+    }
 
-.choices{
-  margin-top:12px;
-  display:flex;
-  flex-direction:column;
-  gap:8px;
-}
-.choice{
-  background:#111;
-  border:1px solid #333;
-  border-radius:12px;
-  padding:12px;
-  color:#fff;
-  font-size:16px;
-  text-align:left;
-  cursor:pointer;
-}
-.choice:hover{background:#1b1b1b}
+    .choice{
+      width:100%;
+      text-align:left;
+      padding: 14px 16px;
+      border-radius: 16px;
+      border: 1px solid rgba(255,255,255,.12);
+      background: rgba(0,0,0,.32);
+      color: var(--text);
+      font-size: 20px;
+      font-weight: 800;
+      letter-spacing:.2px;
+      cursor:pointer;
+      -webkit-tap-highlight-color: transparent;
+    }
+    .choice:active{ transform: scale(.99); }
+    .choice b{
+      display:inline-block;
+      width: 28px;
+      margin-right: 8px;
+      opacity: .95;
+    }
 
-.raceTrack{
-  position:relative;
-  width:100%;
-  height:46px;
-  border-radius:16px;
-  border:1px solid rgba(255,255,255,.18);
-  background:rgba(255,255,255,.06);
-  margin-top:12px;
-  overflow:hidden;
-}
-.finish{position:absolute;right:10px;top:50%;transform:translateY(-50%)}
-.checkpoint{
-  position:absolute;top:50%;
-  width:8px;height:8px;border-radius:50%;
-  transform:translate(-50%,-50%);
-  background:rgba(255,255,255,.22);
-}
-.checkpoint.hit{background:#4ade80}
-.skier{
-  position:absolute;left:10px;top:50%;
-  transform:translateY(-50%);
-  font-size:22px;
-  transition:left .18s ease;
-}
+    .actions{
+      display:flex;
+      gap: 12px;
+      margin-top: 14px;
+      flex-wrap: wrap;
+    }
 
-.muted{opacity:.82}
-#recap .ok{color:#4ade80!important;font-weight:900!important}
-#recap .bad{color:#f87171!important;font-weight:900!important}
+    .btn{
+      appearance:none;
+      border:none;
+      cursor:pointer;
+      border-radius: 16px;
+      padding: 12px 14px;
+      font-weight: 900;
+      font-size: 16px;
+      color: var(--text);
+      background: rgba(255,255,255,.07);
+      border: 1px solid var(--stroke);
+      -webkit-tap-highlight-color: transparent;
+    }
+    .btn:active{ transform: scale(.99); }
 
-.overlay{
-  position:fixed;inset:0;
-  background:rgba(0,0,0,.7);
-  display:flex;
-  align-items:center;
-  justify-content:center;
-  z-index:9999;
-}
-.modal{
-  background:#111;
-  border:1px solid #444;
-  border-radius:16px;
-  padding:18px;
-  width:400px;
-  text-align:center;
-}
-.diff{
-  border:1px solid #555;
-  background:transparent;
-  color:#fff;
-  padding:10px;
-  border-radius:10px;
-  margin:6px 0;
-  width:100%;
-  cursor:pointer;
-  font-weight:800;
-}
-.diff:hover{background:#1b1b1b}
+    .btn.primary{
+      background: rgba(120,140,255,.18);
+      border-color: rgba(120,140,255,.35);
+    }
+    .btn.danger{
+      background: rgba(255,91,91,.12);
+      border-color: rgba(255,91,91,.28);
+    }
 
-.timerGrid{
-  margin-top:10px;
-  display:grid;
-  grid-template-columns:1fr 1fr;
-  gap:10px;
-}
-.timerBtn{
-  border:1px solid #555;
-  background:transparent;
-  color:#fff;
-  padding:10px;
-  border-radius:10px;
-  cursor:pointer;
-  font-weight:800;
-}
-.timerBtn:hover{background:#1b1b1b}
-.timerSelected{
-  border-color:#4ade80!important;
-  box-shadow:0 0 0 2px rgba(74,222,128,.15);
-}
+    .flag.on{
+      background: rgba(255,195,0,.12);
+      border-color: rgba(255,195,0,.30);
+    }
 
-hr{border:none;border-top:1px solid rgba(255,255,255,.14);margin:12px 0}
+    .muted{ color: var(--muted); }
 
-@media (max-width:540px){
-  .modal{width:92vw}
-  .definition{font-size:17px}
-  .timerGrid{grid-template-columns:1fr 1fr}
-}
-</style>
+    .ok{ color: var(--good); font-weight: 900; }
+    .bad{ color: var(--bad); font-weight: 900; }
+
+    /* Results */
+    .resultTop{
+      display:flex;
+      align-items:flex-start;
+      justify-content: space-between;
+      gap: 14px;
+      flex-wrap: wrap;
+      margin-bottom: 10px;
+    }
+    .bigScore{
+      font-size: 26px;
+      font-weight: 950;
+      margin: 0;
+    }
+    .medal{
+      font-weight: 950;
+      opacity:.95;
+      margin-top: 6px;
+    }
+    .recap{
+      margin-top: 14px;
+      padding: 12px;
+      border-radius: 18px;
+      border: 1px solid var(--stroke);
+      background: rgba(0,0,0,.16);
+    }
+
+    .resultBtns{
+      display:grid;
+      grid-template-columns: 1fr;
+      gap: 12px;
+      margin-top: 14px;
+    }
+
+    /* Overlay */
+    .overlay{
+      position:fixed;
+      inset:0;
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      padding: 20px 14px;
+      background: rgba(0,0,0,.55);
+      backdrop-filter: blur(10px);
+      z-index: 50;
+    }
+    .modal{
+      width:100%;
+      max-width: 520px;
+      background: rgba(10,14,28,.92);
+      border: 1px solid rgba(255,255,255,.18);
+      border-radius: 24px;
+      padding: 18px;
+      box-shadow: 0 28px 90px rgba(0,0,0,.6);
+    }
+    .modal h2{
+      margin: 0 0 6px;
+      font-size: 22px;
+      font-weight: 950;
+      letter-spacing:.2px;
+    }
+    .modal p{
+      margin: 0 0 14px;
+      color: var(--muted);
+      font-weight: 650;
+    }
+    .grid2{
+      display:grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+    }
+    .selectRow{
+      display:grid;
+      grid-template-columns: 1fr;
+      gap: 8px;
+      margin-top: 12px;
+    }
+    .label{
+      font-weight: 900;
+      opacity:.95;
+    }
+
+    .difficultyBtn{
+      width:100%;
+      padding: 14px 14px;
+      border-radius: 16px;
+      background: transparent;
+      border: 1px solid rgba(255,255,255,.22);
+      color: var(--text);
+      font-weight: 950;
+      font-size: 16px;
+      cursor:pointer;
+      -webkit-tap-highlight-color: transparent;
+    }
+    .difficultyBtn:active{ transform: scale(.99); }
+
+    .timerWrap{
+      display:flex;
+      gap: 10px;
+      flex-wrap: wrap;
+      align-items:center;
+    }
+    .timerBtn{
+      padding: 10px 12px;
+      border-radius: 999px;
+      border: 1px solid rgba(255,255,255,.20);
+      background: rgba(255,255,255,.06);
+      color: var(--text);
+      font-weight: 900;
+      cursor:pointer;
+      -webkit-tap-highlight-color: transparent;
+    }
+    .timerBtn.timerSelected{
+      background: rgba(120,140,255,.18);
+      border-color: rgba(120,140,255,.42);
+    }
+    select{
+      width:100%;
+      padding: 12px 12px;
+      border-radius: 14px;
+      background: rgba(255,255,255,.06);
+      border: 1px solid rgba(255,255,255,.18);
+      color: var(--text);
+      font-weight: 850;
+      outline: none;
+    }
+
+    /* Mobile tuning */
+    @media (max-width:520px){
+      .hud{ grid-template-columns: 1fr 1fr; }
+      .pill{ padding: 10px 12px; font-size: 14px; min-height: 38px; }
+      .choice{ font-size: 18px; }
+      .definitionText{ padding: 12px; }
+      .card{ padding: 14px; }
+    }
+  </style>
 </head>
-
 <body>
+  <div class="wrap">
+    <header>
+      <h1>GRE Vocab Ladder Quiz</h1>
+      <div class="sub">GRE vocabulary practice under pressure</div>
+    </header>
 
-<h1>GRE Vocab Ladder Quiz</h1>
-<div class="sub">Vocabulary practice under pressure</div>
+    <!-- GAME -->
+    <section id="gameCard" class="card hidden">
+      <div class="hud">
+        <div id="roundPill" class="pill">Round 1</div>
+        <div id="qNum" class="pill right">Question 1/10</div>
 
-<!-- GAME -->
-<div class="card hidden" id="gameCard">
-  <div class="row">
-    <div class="pill" id="roundPill">Round 1</div>
-    <div class="pill" id="qNum">Question 1/10</div>
-    <div class="pill" id="scoreInline">Correct 0/0</div>
-    <div class="pill" id="timer">OFF</div>
+        <div id="scoreInline" class="pill">Correct 0/0</div>
+        <div id="timer" class="pill right">OFF</div>
+      </div>
+
+      <div class="trackBox">
+        <div id="raceTrack" class="raceTrack">
+          <div id="skier" class="skier">⛷️</div>
+          <div class="checkpoints">
+            <div class="checkpoint"></div>
+            <div class="checkpoint"></div>
+            <div class="checkpoint"></div>
+            <div class="checkpoint"></div>
+            <div class="checkpoint"></div>
+            <div class="checkpoint"></div>
+            <div class="checkpoint"></div>
+            <div class="checkpoint"></div>
+            <div class="checkpoint"></div>
+          </div>
+          <div class="finish">🏁</div>
+        </div>
+      </div>
+
+      <!-- REQUIRED by app.js -->
+      <div id="definition" class="definitionText">Definition will appear here</div>
+      <div id="choices" class="choices"></div>
+
+      <div class="actions">
+        <button id="flagBtn" class="btn flag" type="button">🚩 Not sure</button>
+        <button id="skipBtn" class="btn danger" type="button">Skip</button>
+      </div>
+    </section>
+
+    <!-- RESULTS -->
+    <section id="resultCard" class="card hidden">
+      <div class="resultTop">
+        <div>
+          <div id="resultRoundTitle" class="muted" style="font-weight:950;">Round Results</div>
+          <p class="bigScore">
+            Score: <span id="scoreOut">0</span>/<span id="totalOut">10</span>
+            (<span id="pctOut">0</span>%)
+          </p>
+          <div id="medalOut" class="medal">🏁 Finish</div>
+          <div id="roundsHistory" class="muted" style="margin-top:8px;"></div>
+        </div>
+      </div>
+
+      <div id="recap" class="recap"></div>
+
+      <div class="resultBtns">
+        <button id="retryBtn" class="btn primary" type="button">Retry (same definitions)</button>
+        <button id="nextBtn" class="btn" type="button">Next 10</button>
+        <button id="reviewWrongBtn" class="btn hidden" type="button">Review wrong + flagged</button>
+        <button id="reviewLast50Btn" class="btn hidden" type="button">Review last 50</button>
+        <button id="restartBtn" class="btn" type="button">Change difficulty / time</button>
+      </div>
+    </section>
   </div>
 
-  <div class="raceTrack" id="raceTrack">
-    <div class="finish">🏁</div>
-    <div class="checkpoint" style="left:10%"></div>
-    <div class="checkpoint" style="left:20%"></div>
-    <div class="checkpoint" style="left:30%"></div>
-    <div class="checkpoint" style="left:40%"></div>
-    <div class="checkpoint" style="left:50%"></div>
-    <div class="checkpoint" style="left:60%"></div>
-    <div class="checkpoint" style="left:70%"></div>
-    <div class="checkpoint" style="left:80%"></div>
-    <div class="checkpoint" style="left:90%"></div>
-    <div class="skier" id="skier">⛷️</div>
-  </div>
+  <!-- OVERLAY -->
+  <div id="difficultyOverlay" class="overlay">
+    <div class="modal">
+      <h2>Select difficulty and time</h2>
+      <p>Difficulty controls number of answer choices. Timer is optional.</p>
 
-  <div class="definition" id="definition"></div>
+      <div class="label">Difficulty</div>
+      <div class="grid2" style="margin-top:8px;">
+        <button id="mEasy" class="difficultyBtn" type="button">Easy (3 choices)</button>
+        <button id="mMedium" class="difficultyBtn" type="button">Medium (5 choices)</button>
+        <button id="mHard" class="difficultyBtn" type="button">Hard (6 choices)</button>
+        <button id="mExtreme" class="difficultyBtn" type="button">Extreme (10 choices)</button>
+      </div>
 
-  <div class="quickRow">
-    <button class="smallBtn" id="flagBtn" type="button">🚩 Not sure</button>
-    <button class="smallBtn" id="skipBtn" type="button">Skip</button>
-  </div>
+      <div class="selectRow">
+        <div class="label">Timer</div>
 
-  <div class="choices" id="choices"></div>
-</div>
+        <!-- Visual buttons (app.js reads these via data-time and writes into #timeChoice) -->
+        <div class="timerWrap">
+          <button class="timerBtn timerSelected" type="button" data-time="off">OFF</button>
+          <button class="timerBtn" type="button" data-time="60">60s</button>
+          <button class="timerBtn" type="button" data-time="90">90s</button>
+          <button class="timerBtn" type="button" data-time="120">120s</button>
+        </div>
 
-<!-- RESULTS -->
-<div class="card hidden" id="resultCard">
-  <div>
-    <b id="resultRoundTitle">Round 1 Results</b>
-  </div>
-  <div style="margin-top:6px">
-    <span id="medalOut"></span>
-  </div>
+        <!-- app.js expects this element id; keep it even if you use buttons -->
+        <select id="timeChoice" aria-label="Timer choice">
+          <option value="off" selected>OFF</option>
+          <option value="60">60 seconds</option>
+          <option value="90">90 seconds</option>
+          <option value="120">120 seconds</option>
+        </select>
+      </div>
 
-  <div style="margin-top:8px">
-    <b>Score:</b> <span id="scoreOut"></span>/<span id="totalOut">10</span>
-    (<span id="pctOut"></span>%)
-  </div>
-
-  <div id="recap" style="margin-top:10px"></div>
-
-  <div style="margin-top:12px;display:flex;gap:10px;flex-wrap:wrap">
-    <button id="retryBtn" class="diff" type="button">Retry</button>
-    <button id="nextBtn" class="diff" type="button">Next 10</button>
-    <button id="reviewWrongBtn" class="diff hidden" type="button">Review Wrong + Flagged</button>
-    <button id="reviewLast50Btn" class="diff hidden" type="button">Review Last 50</button>
-    <button id="restartBtn" class="diff" type="button">Change Difficulty</button>
-  </div>
-
-  <div class="muted" id="roundsHistory" style="margin-top:10px"></div>
-</div>
-
-<!-- OVERLAY -->
-<div class="overlay" id="difficultyOverlay">
-  <div class="modal">
-    <h2>Select time and difficulty</h2>
-    <div class="muted">Timer is optional. Pick one, then choose difficulty.</div>
-
-    <input type="hidden" id="timeChoice" value="off" />
-
-    <div class="timerGrid">
-      <button class="timerBtn timerSelected" type="button" data-time="off">OFF</button>
-      <button class="timerBtn" type="button" data-time="60">60s</button>
-      <button class="timerBtn" type="button" data-time="90">90s</button>
-      <button class="timerBtn" type="button" data-time="120">120s</button>
+      <p class="muted" style="margin-top:14px;margin-bottom:0;">
+        Tip: “Not sure” flags the item so it can show up in Review modes later.
+      </p>
     </div>
-
-    <hr />
-
-    <button class="diff" id="mEasy" type="button">Easy (3)</button>
-    <button class="diff" id="mMedium" type="button">Medium (5)</button>
-    <button class="diff" id="mHard" type="button">Hard (6)</button>
-    <button class="diff" id="mExtreme" type="button">Extreme (10)</button>
   </div>
-</div>
 
-<script src="./words.js"></script>
-<script src="./app.js"></script>
+  <!-- IMPORTANT: words.js MUST load before app.js -->
+  <script src="./words.js"></script>
+  <script src="./app.js"></script>
 </body>
 </html>
