@@ -8,9 +8,11 @@
 <style>
 *{box-sizing:border-box}
 body{
-  margin:0;padding:14px;
+  margin:0;
+  padding:14px;
   font-family:system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Arial,sans-serif;
-  background:#0b0f1e;color:#eef1ff
+  background:#0b0f1e;
+  color:#eef1ff;
 }
 .hidden{display:none}
 h1{margin:0;font-size:26px;font-weight:800}
@@ -21,38 +23,95 @@ h1{margin:0;font-size:26px;font-weight:800}
   border:1px solid rgba(255,255,255,.14);
   border-radius:16px;
   padding:14px;
-  margin-top:14px
+  margin-top:14px;
 }
-.row{display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap}
-#timer{font-weight:800;padding:2px 10px;border:1px solid rgba(255,255,255,.25);border-radius:999px}
 
-.definition{margin-top:10px;font-size:18px;min-height:52px}
-.choices{margin-top:12px;display:flex;flex-direction:column;gap:8px}
+.row{
+  display:flex;
+  justify-content:space-between;
+  align-items:center;
+  gap:10px;
+  flex-wrap:wrap;
+}
 
+.pill{
+  font-weight:800;
+  padding:2px 10px;
+  border:1px solid rgba(255,255,255,.25);
+  border-radius:999px;
+}
+
+#timer{min-width:64px;text-align:center}
+
+.definition{
+  margin-top:10px;
+  font-size:18px;
+  min-height:52px;
+}
+
+.quickRow{
+  margin-top:10px;
+  display:flex;
+  gap:10px;
+  flex-wrap:wrap;
+}
+
+.smallBtn{
+  border:1px solid rgba(255,255,255,.28);
+  background:transparent;
+  color:#fff;
+  border-radius:10px;
+  padding:8px 10px;
+  cursor:pointer;
+  font-weight:800;
+}
+.smallBtn:hover{background:#1b1b1b}
+.smallBtn.on{
+  border-color:#4ade80;
+  box-shadow:0 0 0 2px rgba(74,222,128,.12);
+}
+
+.choices{
+  margin-top:12px;
+  display:flex;
+  flex-direction:column;
+  gap:8px;
+}
 .choice{
-  background:#111;border:1px solid #333;border-radius:12px;
-  padding:12px;color:#fff;font-size:16px;text-align:left;cursor:pointer
+  background:#111;
+  border:1px solid #333;
+  border-radius:12px;
+  padding:12px;
+  color:#fff;
+  font-size:16px;
+  text-align:left;
+  cursor:pointer;
 }
 .choice:hover{background:#1b1b1b}
 
 .raceTrack{
-  position:relative;width:100%;height:46px;border-radius:16px;
+  position:relative;
+  width:100%;
+  height:46px;
+  border-radius:16px;
   border:1px solid rgba(255,255,255,.18);
   background:rgba(255,255,255,.06);
-  margin-top:12px;overflow:hidden
+  margin-top:12px;
+  overflow:hidden;
 }
 .finish{position:absolute;right:10px;top:50%;transform:translateY(-50%)}
 .checkpoint{
   position:absolute;top:50%;
   width:8px;height:8px;border-radius:50%;
   transform:translate(-50%,-50%);
-  background:rgba(255,255,255,.22)
+  background:rgba(255,255,255,.22);
 }
 .checkpoint.hit{background:#4ade80}
 .skier{
   position:absolute;left:10px;top:50%;
   transform:translateY(-50%);
-  font-size:22px;transition:left .18s ease
+  font-size:22px;
+  transition:left .18s ease;
 }
 
 .muted{opacity:.82}
@@ -60,39 +119,77 @@ h1{margin:0;font-size:26px;font-weight:800}
 #recap .bad{color:#f87171!important;font-weight:900!important}
 
 .overlay{
-  position:fixed;inset:0;background:rgba(0,0,0,.7);
-  display:flex;align-items:center;justify-content:center;z-index:9999
+  position:fixed;inset:0;
+  background:rgba(0,0,0,.7);
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  z-index:9999;
 }
 .modal{
-  background:#111;border:1px solid #444;border-radius:16px;
-  padding:18px;width:380px;text-align:center
+  background:#111;
+  border:1px solid #444;
+  border-radius:16px;
+  padding:18px;
+  width:400px;
+  text-align:center;
 }
 .diff{
-  border:1px solid #555;background:transparent;color:#fff;
-  padding:10px;border-radius:10px;margin:6px 0;width:100%;
-  cursor:pointer
+  border:1px solid #555;
+  background:transparent;
+  color:#fff;
+  padding:10px;
+  border-radius:10px;
+  margin:6px 0;
+  width:100%;
+  cursor:pointer;
+  font-weight:800;
 }
 .diff:hover{background:#1b1b1b}
-.timerRow{display:flex;gap:10px;flex-wrap:wrap;margin:10px 0 6px}
-.timerRow .diff{flex:1;min-width:85px;margin:0}
+
+.timerGrid{
+  margin-top:10px;
+  display:grid;
+  grid-template-columns:1fr 1fr;
+  gap:10px;
+}
+.timerBtn{
+  border:1px solid #555;
+  background:transparent;
+  color:#fff;
+  padding:10px;
+  border-radius:10px;
+  cursor:pointer;
+  font-weight:800;
+}
+.timerBtn:hover{background:#1b1b1b}
 .timerSelected{
   border-color:#4ade80!important;
-  box-shadow:0 0 0 2px rgba(74,222,128,.15)
+  box-shadow:0 0 0 2px rgba(74,222,128,.15);
 }
+
 hr{border:none;border-top:1px solid rgba(255,255,255,.14);margin:12px 0}
+
+@media (max-width:540px){
+  .modal{width:92vw}
+  .definition{font-size:17px}
+  .timerGrid{grid-template-columns:1fr 1fr}
+}
 </style>
 </head>
 
 <body>
+
 <h1>GRE Vocab Ladder Quiz</h1>
 <div class="sub">Vocabulary practice under pressure</div>
 
 <!-- GAME -->
 <div class="card hidden" id="gameCard">
   <div class="row">
-    <div id="qNum">Question 1/10</div>
-    <div id="scoreInline">Correct 0/0</div>
-    <div id="timer">OFF</div>
+    <div class="pill" id="roundPill">Round 1</div>
+    <div class="pill" id="qNum">Question 1/10</div>
+    <div class="pill" id="scoreInline">Correct 0/0</div>
+    <div class="pill" id="timer">OFF</div>
   </div>
 
   <div class="raceTrack" id="raceTrack">
@@ -110,12 +207,25 @@ hr{border:none;border-top:1px solid rgba(255,255,255,.14);margin:12px 0}
   </div>
 
   <div class="definition" id="definition"></div>
+
+  <div class="quickRow">
+    <button class="smallBtn" id="flagBtn" type="button">🚩 Not sure</button>
+    <button class="smallBtn" id="skipBtn" type="button">Skip</button>
+  </div>
+
   <div class="choices" id="choices"></div>
 </div>
 
 <!-- RESULTS -->
 <div class="card hidden" id="resultCard">
   <div>
+    <b id="resultRoundTitle">Round 1 Results</b>
+  </div>
+  <div style="margin-top:6px">
+    <span id="medalOut"></span>
+  </div>
+
+  <div style="margin-top:8px">
     <b>Score:</b> <span id="scoreOut"></span>/<span id="totalOut">10</span>
     (<span id="pctOut"></span>%)
   </div>
@@ -125,9 +235,12 @@ hr{border:none;border-top:1px solid rgba(255,255,255,.14);margin:12px 0}
   <div style="margin-top:12px;display:flex;gap:10px;flex-wrap:wrap">
     <button id="retryBtn" class="diff" type="button">Retry</button>
     <button id="nextBtn" class="diff" type="button">Next 10</button>
-    <button id="missedBtn" class="diff hidden" type="button">Practice Missed (50)</button>
+    <button id="reviewWrongBtn" class="diff hidden" type="button">Review Wrong + Flagged</button>
+    <button id="reviewLast50Btn" class="diff hidden" type="button">Review Last 50</button>
     <button id="restartBtn" class="diff" type="button">Change Difficulty</button>
   </div>
+
+  <div class="muted" id="roundsHistory" style="margin-top:10px"></div>
 </div>
 
 <!-- OVERLAY -->
@@ -138,11 +251,11 @@ hr{border:none;border-top:1px solid rgba(255,255,255,.14);margin:12px 0}
 
     <input type="hidden" id="timeChoice" value="off" />
 
-    <div class="timerRow">
-      <button class="diff timerSelected" type="button" data-time="off">OFF</button>
-      <button class="diff" type="button" data-time="60">60s</button>
-      <button class="diff" type="button" data-time="90">90s</button>
-      <button class="diff" type="button" data-time="120">120s</button>
+    <div class="timerGrid">
+      <button class="timerBtn timerSelected" type="button" data-time="off">OFF</button>
+      <button class="timerBtn" type="button" data-time="60">60s</button>
+      <button class="timerBtn" type="button" data-time="90">90s</button>
+      <button class="timerBtn" type="button" data-time="120">120s</button>
     </div>
 
     <hr />
