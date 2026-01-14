@@ -14,7 +14,6 @@ document.addEventListener("DOMContentLoaded", () => {
     qNum: document.getElementById("qNum"),
     scoreInline: document.getElementById("scoreInline"),
     timer: document.getElementById("timer"),
-    timeSelect: document.getElementById("timeSelect"),
 
     definition: document.getElementById("definition"),
     choices: document.getElementById("choices"),
@@ -34,10 +33,14 @@ document.addEventListener("DOMContentLoaded", () => {
     mMedium: document.getElementById("mMedium"),
     mHard: document.getElementById("mHard"),
     mExtreme: document.getElementById("mExtreme"),
+
+    t60: document.getElementById("t60"),
+    t90: document.getElementById("t90"),
+    t120: document.getElementById("t120"),
   };
 
   let mode = "medium";
-  let qIndex = 0;     // 0..9 current question index
+  let qIndex = 0;
   let correct = 0;
   let locked = false;
 
@@ -45,12 +48,12 @@ document.addEventListener("DOMContentLoaded", () => {
   let history = [];
   let isBuilding = false;
 
-  // Retry support (same exact round)
-  let lastRoundWords = null; // array of 10 words (in order)
+  // Retry support (same round)
+  let lastRoundWords = null;
   let lastRoundMode = "medium";
 
   // Timer
-  let timeLimit = 60;
+  let timeLimit = 60; // selected in modal
   let timeLeft = 60;
   let timerId = null;
 
@@ -75,52 +78,6 @@ document.addEventListener("DOMContentLoaded", () => {
     }catch{
       return "Definition unavailable.";
     }
-  }
-
-  function setButtonsLoading(on){
-    if (els.nextBtn) els.nextBtn.disabled = on;
-    if (els.retryBtn) els.retryBtn.disabled = on;
-    if (els.restartBtn) els.restartBtn.disabled = on;
-
-    if (els.mEasy) els.mEasy.disabled = on;
-    if (els.mMedium) els.mMedium.disabled = on;
-    if (els.mHard) els.mHard.disabled = on;
-    if (els.mExtreme) els.mExtreme.disabled = on;
-
-    if (els.timeSelect) els.timeSelect.disabled = on;
-  }
-
-  // Race progress: 0 start -> 10 finish
-  function updateRaceProgress(answeredCount){
-    if (!els.skier || !els.raceTrack) return;
-
-    const min = 10;
-    const max = els.raceTrack.clientWidth - 10;
-    const pct = Math.max(0, Math.min(1, answeredCount / TOTAL));
-    const x = min + (max - min) * pct;
-
-    els.skier.style.left = `${x}px`;
-
-    const cps = els.raceTrack.querySelectorAll(".checkpoint");
-    cps.forEach((cp, idx) => {
-      const cpNumber = idx + 1; // 1..9
-      if (answeredCount >= cpNumber) cp.classList.add("hit");
-      else cp.classList.remove("hit");
-    });
-  }
-
-  function updateHUD(){
-    const asked = Math.min(qIndex + 1, TOTAL);
-    const answeredSoFar = qIndex; // questions already answered
-    // Left: "Question 1/10"
-    els.qNum.textContent = `Question ${asked}/${TOTAL}`;
-    // Middle: "Correct 3/7" where 7 = answeredSoFar+1? You want asked count visible.
-    els.scoreInline.textContent = `Correct ${correct}/${asked}`;
-
-    if (els.timer) els.timer.textContent = `${timeLeft}s`;
-
-    // progress based on answered questions
-    updateRaceProgress(answeredSoFar);
   }
 
   function stopTimer(){
@@ -150,6 +107,44 @@ document.addEventListener("DOMContentLoaded", () => {
     locked = true;
     if (els.choices) els.choices.innerHTML = "";
     showResults(true);
+  }
+
+  function setTimerChoice(seconds){
+    timeLimit = seconds;
+
+    // highlight selected timer button
+    [els.t60, els.t90, els.t120].forEach(b => b && b.classList.remove("timerSelected"));
+    if (seconds === 60 && els.t60) els.t60.classList.add("timerSelected");
+    if (seconds === 90 && els.t90) els.t90.classList.add("timerSelected");
+    if (seconds === 120 && els.t120) els.t120.classList.add("timerSelected");
+  }
+
+  // Race progress (0 start -> 10 finish)
+  function updateRaceProgress(answeredCount){
+    if (!els.skier || !els.raceTrack) return;
+
+    const min = 10;
+    const max = els.raceTrack.clientWidth - 10;
+    const pct = Math.max(0, Math.min(1, answeredCount / TOTAL));
+    const x = min + (max - min) * pct;
+
+    els.skier.style.left = `${x}px`;
+
+    const cps = els.raceTrack.querySelectorAll(".checkpoint");
+    cps.forEach((cp, idx) => {
+      const cpNumber = idx + 1; // 1..9
+      if (answeredCount >= cpNumber) cp.classList.add("hit");
+      else cp.classList.remove("hit");
+    });
+  }
+
+  function updateHUD(){
+    const asked = Math.min(qIndex + 1, TOTAL);
+    els.qNum.textContent = `Question ${asked}/${TOTAL}`;
+    els.scoreInline.textContent = `Correct ${correct}/${asked}`;
+    if (els.timer) els.timer.textContent = `${timeLeft}s`;
+
+    updateRaceProgress(qIndex);
   }
 
   async function buildRoundFromWords(words10){
@@ -183,13 +178,6 @@ document.addEventListener("DOMContentLoaded", () => {
     history = [];
     locked = false;
 
-    // timer from selector (if present)
-    if (els.timeSelect) {
-      const v = parseInt(els.timeSelect.value, 10);
-      if (!Number.isNaN(v)) timeLimit = v;
-    }
-
-    // reset visuals
     updateRaceProgress(0);
 
     els.overlay.style.display = "none";
@@ -198,7 +186,6 @@ document.addEventListener("DOMContentLoaded", () => {
 
     els.definition.textContent = "Loading definitions…";
     els.choices.innerHTML = "";
-    setButtonsLoading(true);
 
     let words10;
     if (forceWords10 && forceWords10.length === TOTAL) {
@@ -208,13 +195,11 @@ document.addEventListener("DOMContentLoaded", () => {
       words10 = pool.slice(0, TOTAL);
     }
 
-    // store for Retry
     lastRoundWords = [...words10];
 
     await buildRoundFromWords(words10);
 
     isBuilding = false;
-    setButtonsLoading(false);
 
     startTimer();
     render();
@@ -257,7 +242,6 @@ document.addEventListener("DOMContentLoaded", () => {
 
     els.choices.innerHTML = "";
 
-    // advance progress immediately
     qIndex++;
     updateRaceProgress(qIndex);
 
@@ -301,16 +285,24 @@ document.addEventListener("DOMContentLoaded", () => {
     }
   }
 
+  // --- Timer buttons (in modal) ---
+  if (els.t60) els.t60.onclick = () => setTimerChoice(60);
+  if (els.t90) els.t90.onclick = () => setTimerChoice(90);
+  if (els.t120) els.t120.onclick = () => setTimerChoice(120);
+
+  // default selection
+  setTimerChoice(60);
+
   // Difficulty buttons
   els.mEasy.onclick = () => start("easy");
   els.mMedium.onclick = () => start("medium");
   els.mHard.onclick = () => start("hard");
   els.mExtreme.onclick = () => start("extreme");
 
-  // Next 10 = same difficulty, new words
+  // Next 10 = same difficulty, new words, same selected timer
   els.nextBtn.onclick = () => start(mode);
 
-  // Retry = same difficulty + same exact 10 words again
+  // Retry = same difficulty + same exact 10 words
   els.retryBtn.onclick = () => {
     if (!lastRoundWords) return;
     start(lastRoundMode, lastRoundWords);
