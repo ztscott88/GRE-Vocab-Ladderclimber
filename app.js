@@ -30,9 +30,14 @@ document.addEventListener("DOMContentLoaded", () => {
     mExtreme: document.getElementById("mExtreme"),
   };
 
-  let mode, qIndex, correct, locked;
+  let mode = "medium";
+  let qIndex = 0;
+  let correct = 0;
+  let locked = false;
+
   let round = [];
   let history = [];
+  let isBuilding = false;
 
   function shuffle(a){
     for(let i=a.length-1;i>0;i--){
@@ -44,7 +49,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
   function sanitize(def, word){
     if(!def) return "Definition unavailable.";
-    return def.replace(new RegExp(`\\b${word}\\b`, "ig"), "_____");
+    return String(def).replace(new RegExp(`\\b${word}\\b`, "ig"), "_____");
   }
 
   async function fetchDef(word){
@@ -57,32 +62,58 @@ document.addEventListener("DOMContentLoaded", () => {
     }
   }
 
-  async function start(m){
-    mode = m;
+  function setButtonsLoading(on){
+    if (els.nextBtn) els.nextBtn.disabled = on;
+    if (els.restartBtn) els.restartBtn.disabled = on;
+    if (els.mEasy) els.mEasy.disabled = on;
+    if (els.mMedium) els.mMedium.disabled = on;
+    if (els.mHard) els.mHard.disabled = on;
+    if (els.mExtreme) els.mExtreme.disabled = on;
+  }
+
+  async function start(selectedMode){
+    // prevent multiple overlapping builds (this breaks Next 10)
+    if (isBuilding) return;
+    isBuilding = true;
+
+    mode = selectedMode || mode || "medium";
     qIndex = 0;
     correct = 0;
     history = [];
     locked = false;
 
+    // UI state
     els.overlay.style.display = "none";
     els.resultCard.classList.add("hidden");
     els.gameCard.classList.remove("hidden");
 
+    els.definition.textContent = "Loading definitions…";
+    els.choices.innerHTML = "";
+    setButtonsLoading(true);
+
+    // Build round
     const pool = shuffle([...new Set(WORDS)]);
     const picked = pool.slice(0, TOTAL);
 
-    round = await Promise.all(picked.map(async word => {
+    // prefetch defs for the 10 words
+    const defs = await Promise.all(picked.map(w => fetchDef(w)));
+
+    round = picked.map((word, idx) => {
       const opts = [word];
       const d = shuffle(pool.filter(w => w !== word));
-      while(opts.length < MODE[mode]) opts.push(d.pop());
+      while(opts.length < MODE[mode] && d.length) opts.push(d.pop());
       shuffle(opts);
+
       return {
         word,
         opts,
         ans: opts.indexOf(word),
-        def: await fetchDef(word)
+        def: defs[idx] || "Definition unavailable."
       };
-    }));
+    });
+
+    isBuilding = false;
+    setButtonsLoading(false);
 
     render();
   }
@@ -158,17 +189,23 @@ document.addEventListener("DOMContentLoaded", () => {
     `).join("");
   }
 
+  // Difficulty buttons
   els.mEasy.onclick = () => start("easy");
   els.mMedium.onclick = () => start("medium");
   els.mHard.onclick = () => start("hard");
   els.mExtreme.onclick = () => start("extreme");
 
+  // ✅ Next 10 fixed (always uses last mode, prevents overlap)
   els.nextBtn.onclick = () => start(mode);
+
+  // Change difficulty
   els.restartBtn.onclick = () => {
+    if (isBuilding) return;
     els.overlay.style.display = "flex";
     els.gameCard.classList.add("hidden");
     els.resultCard.classList.add("hidden");
   };
 
+  // Initial
   els.overlay.style.display = "flex";
 });
