@@ -1,6 +1,9 @@
 document.addEventListener("DOMContentLoaded", () => {
 
-  const TOTAL = 10;
+  const DEFAULT_TOTAL = 10;
+  const MISSED_UNLOCK_ROUNDS = 5;   // after 5 plays
+  const MISSED_REVIEW_TOTAL = 50;   // 50 words/definitions
+
   const LETTERS = "abcdefghij".split("");
   const WORDS = Array.isArray(window.VOCAB_WORDS) ? window.VOCAB_WORDS : [];
 
@@ -22,23 +25,27 @@ document.addEventListener("DOMContentLoaded", () => {
     raceTrack: document.getElementById("raceTrack"),
 
     scoreOut: document.getElementById("scoreOut"),
+    totalOut: document.getElementById("totalOut"),
     pctOut: document.getElementById("pctOut"),
     recap: document.getElementById("recap"),
 
     restartBtn: document.getElementById("restartBtn"),
     nextBtn: document.getElementById("nextBtn"),
     retryBtn: document.getElementById("retryBtn"),
+    missedBtn: document.getElementById("missedBtn"),
 
     mEasy: document.getElementById("mEasy"),
     mMedium: document.getElementById("mMedium"),
     mHard: document.getElementById("mHard"),
     mExtreme: document.getElementById("mExtreme"),
 
-    // optional: buttons exist in index but app.js doesn't need to bind them
     timeChoice: document.getElementById("timeChoice"),
   };
 
+  // ---------------- State ----------------
   let mode = "medium";
+  let total = DEFAULT_TOTAL;
+
   let qIndex = 0;
   let correct = 0;
   let locked = false;
@@ -47,9 +54,10 @@ document.addEventListener("DOMContentLoaded", () => {
   let history = [];
   let isBuilding = false;
 
-  // Retry support (same round)
+  // Retry support
   let lastRoundWords = null;
   let lastRoundMode = "medium";
+  let lastRoundTotal = DEFAULT_TOTAL;
 
   // Timer
   let timerEnabled = false;
@@ -57,6 +65,12 @@ document.addEventListener("DOMContentLoaded", () => {
   let timeLeft = 60;
   let timerId = null;
 
+  // Missed system
+  let roundsPlayedSinceMissedReset = 0;
+  const missedSet = new Set();              // unique missed words
+  const defCache = new Map();               // word -> definition (sanitized)
+
+  // ---------------- Helpers ----------------
   function shuffle(a){
     for(let i=a.length-1;i>0;i--){
       const j=Math.floor(Math.random()*(i+1));
@@ -71,20 +85,24 @@ document.addEventListener("DOMContentLoaded", () => {
   }
 
   async function fetchDef(word){
+    if (defCache.has(word)) return defCache.get(word);
+
     try{
       const r = await fetch(`https://api.dictionaryapi.dev/api/v2/entries/en/${encodeURIComponent(word)}`);
       const d = await r.json();
-      return sanitize(d?.[0]?.meanings?.[0]?.definitions?.[0]?.definition, word);
+      const cleaned = sanitize(d?.[0]?.meanings?.[0]?.definitions?.[0]?.definition, word);
+      defCache.set(word, cleaned);
+      return cleaned;
     }catch{
-      return "Definition unavailable.";
+      const fallback = "Definition unavailable.";
+      defCache.set(word, fallback);
+      return fallback;
     }
   }
 
+  // ---------------- Timer ----------------
   function stopTimer(){
-    if (timerId) {
-      clearInterval(timerId);
-      timerId = null;
-    }
+    if (timerId) { clearInterval(timerId); timerId = null; }
   }
 
   function startTimer(){
@@ -101,7 +119,6 @@ document.addEventListener("DOMContentLoaded", () => {
     timerId = setInterval(() => {
       timeLeft--;
       if (els.timer) els.timer.textContent = `${timeLeft}s`;
-
       if (timeLeft <= 0) {
         stopTimer();
         endGameDueToTime();
@@ -117,9 +134,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
   function readTimeChoice(){
     const raw = els.timeChoice ? String(els.timeChoice.value || "off").toLowerCase() : "off";
-    if (raw === "off" || raw === "0" || raw === "false") {
-      return { enabled:false, seconds:60 };
-    }
+    if (raw === "off" || raw === "0" || raw === "false") return { enabled:false, seconds:60 };
     const n = parseInt(raw, 10);
     if (!Number.isFinite(n) || n <= 0) return { enabled:false, seconds:60 };
     return { enabled:true, seconds:n };
@@ -129,65 +144,88 @@ document.addEventListener("DOMContentLoaded", () => {
     const t = readTimeChoice();
     timerEnabled = t.enabled;
     timeLimit = t.seconds;
-
     if (els.timer) els.timer.textContent = timerEnabled ? `${timeLimit}s` : "OFF";
   }
 
-  // Race progress (0 start -> 10 finish)
+  // ---------------- Race progress ----------------
   function updateRaceProgress(answeredCount){
     if (!els.skier || !els.raceTrack) return;
 
     const min = 10;
     const max = els.raceTrack.clientWidth - 10;
-    const pct = Math.max(0, Math.min(1, answeredCount / TOTAL));
+    const pct = Math.max(0, Math.min(1, answeredCount / total));
     const x = min + (max - min) * pct;
 
     els.skier.style.left = `${x}px`;
 
+    // keep 9 checkpoints, fill based on proportion
     const cps = els.raceTrack.querySelectorAll(".checkpoint");
     cps.forEach((cp, idx) => {
-      const cpNumber = idx + 1; // 1..9
-      if (answeredCount >= cpNumber) cp.classList.add("hit");
+      const threshold = (idx + 1) / (cps.length + 1); // 1/10..9/10
+      if (pct >= threshold) cp.classList.add("hit");
       else cp.classList.remove("hit");
     });
   }
 
   function updateHUD(){
-    const asked = Math.min(qIndex + 1, TOTAL);
-    els.qNum.textContent = `Question ${asked}/${TOTAL}`;
+    const asked = Math.min(qIndex + 1, total);
+    els.qNum.textContent = `Question ${asked}/${total}`;
     els.scoreInline.textContent = `Correct ${correct}/${asked}`;
     if (els.timer) els.timer.textContent = timerEnabled ? `${timeLeft}s` : "OFF";
     updateRaceProgress(qIndex);
   }
 
-  async function buildRoundFromWords(words10){
+  // ---------------- Round build ----------------
+  async function buildRoundFromWords(wordsN){
     const pool = [...new Set(WORDS)];
-    const defs = await Promise.all(words10.map(w => fetchDef(w)));
+    const defs = await Promise.all(wordsN.map(w => fetchDef(w)));
 
-    round = words10.map((word, idx) => {
+    round = wordsN.map((word, idx) => {
       const opts = [word];
       const d = shuffle(pool.filter(w => w !== word));
       while(opts.length < MODE[mode] && d.length) opts.push(d.pop());
       shuffle(opts);
 
-      return {
-        word,
-        opts,
-        ans: opts.indexOf(word),
-        def: defs[idx] || "Definition unavailable."
-      };
+      const def = defs[idx] || "Definition unavailable.";
+      defCache.set(word, def);
+
+      return { word, opts, ans: opts.indexOf(word), def };
     });
   }
 
-  async function start(selectedMode, forceWords10=null){
+  function pickWords(count){
+    const pool = shuffle([...new Set(WORDS)]);
+    return pool.slice(0, count);
+  }
+
+  function getMissedWordsForReview(){
+    const missed = Array.from(missedSet);
+    shuffle(missed);
+
+    // If you have fewer than 50 missed, fill remaining with random unseen words
+    if (missed.length < MISSED_REVIEW_TOTAL) {
+      const need = MISSED_REVIEW_TOTAL - missed.length;
+      const extras = pickWords(need * 3).filter(w => !missedSet.has(w));
+      missed.push(...extras.slice(0, need));
+    }
+
+    return missed.slice(0, MISSED_REVIEW_TOTAL);
+  }
+
+  // ---------------- Game flow ----------------
+  async function start(selectedMode, forceWords=null, forcedTotal=null){
     if (isBuilding) return;
     isBuilding = true;
 
     mode = selectedMode || mode || "medium";
     lastRoundMode = mode;
 
-    // lock in timer selection at the moment the run starts
+    // lock in timer selection
     applyTimeChoice();
+
+    // set total for this run
+    total = forcedTotal || DEFAULT_TOTAL;
+    lastRoundTotal = total;
 
     qIndex = 0;
     correct = 0;
@@ -200,20 +238,21 @@ document.addEventListener("DOMContentLoaded", () => {
     els.resultCard.classList.add("hidden");
     els.gameCard.classList.remove("hidden");
 
+    if (els.missedBtn) els.missedBtn.classList.add("hidden");
+
     els.definition.textContent = "Loading definitions…";
     els.choices.innerHTML = "";
 
-    let words10;
-    if (forceWords10 && forceWords10.length === TOTAL) {
-      words10 = [...forceWords10];
+    let words;
+    if (forceWords && forceWords.length === total) {
+      words = [...forceWords];
     } else {
-      const pool = shuffle([...new Set(WORDS)]);
-      words10 = pool.slice(0, TOTAL);
+      words = pickWords(total);
     }
 
-    lastRoundWords = [...words10];
+    lastRoundWords = [...words];
 
-    await buildRoundFromWords(words10);
+    await buildRoundFromWords(words);
 
     isBuilding = false;
 
@@ -242,12 +281,14 @@ document.addEventListener("DOMContentLoaded", () => {
   }
 
   function choose(i){
-    if(locked) return;
+    if (locked) return;
     locked = true;
 
     const q = round[qIndex];
     const ok = i === q.ans;
-    if(ok) correct++;
+
+    if (ok) correct++;
+    else missedSet.add(q.word); // track missed words across rounds
 
     history.push({
       def: q.def,
@@ -261,8 +302,12 @@ document.addEventListener("DOMContentLoaded", () => {
     qIndex++;
     updateRaceProgress(qIndex);
 
-    if(qIndex >= TOTAL){
+    if (qIndex >= total){
       stopTimer();
+
+      // Only count "plays" for normal 10-question rounds
+      if (total === DEFAULT_TOTAL) roundsPlayedSinceMissedReset++;
+
       showResults(false);
       return;
     }
@@ -277,7 +322,8 @@ document.addEventListener("DOMContentLoaded", () => {
     els.resultCard.classList.remove("hidden");
 
     els.scoreOut.textContent = correct;
-    els.pctOut.textContent = Math.round(correct / TOTAL * 100);
+    if (els.totalOut) els.totalOut.textContent = total;
+    els.pctOut.textContent = Math.round(correct / total * 100);
 
     const header = endedByTime
       ? `<div style="margin:10px 0; font-weight:800;">Time’s up! Here’s your recap:</div>`
@@ -297,25 +343,47 @@ document.addEventListener("DOMContentLoaded", () => {
         </div>
       `).join("");
 
-    if (endedByTime && history.length < TOTAL) {
-      els.recap.innerHTML += `<div style="opacity:.8; margin-top:10px;">You answered ${history.length} of ${TOTAL} questions.</div>`;
+    // ---- Missed Review unlock logic ----
+    const canUnlock = roundsPlayedSinceMissedReset >= MISSED_UNLOCK_ROUNDS && missedSet.size > 0;
+
+    if (els.missedBtn) {
+      if (canUnlock && total === DEFAULT_TOTAL) {
+        els.missedBtn.classList.remove("hidden");
+        els.missedBtn.textContent = `Practice Missed (${MISSED_REVIEW_TOTAL})`;
+      } else {
+        els.missedBtn.classList.add("hidden");
+      }
+    }
+
+    // if this was the missed-review run, reset the system afterwards
+    if (total === MISSED_REVIEW_TOTAL) {
+      roundsPlayedSinceMissedReset = 0;
+      missedSet.clear();
     }
   }
 
-  // Difficulty buttons
+  // ---------------- Buttons ----------------
   els.mEasy.onclick = () => start("easy");
   els.mMedium.onclick = () => start("medium");
   els.mHard.onclick = () => start("hard");
   els.mExtreme.onclick = () => start("extreme");
 
-  // Next 10 = same difficulty, new words, same timer selection
-  els.nextBtn.onclick = () => start(mode);
+  // Next 10 (normal)
+  els.nextBtn.onclick = () => start(mode, null, DEFAULT_TOTAL);
 
-  // Retry = same difficulty + same exact 10 words
+  // Retry (same exact round)
   els.retryBtn.onclick = () => {
     if (!lastRoundWords) return;
-    start(lastRoundMode, lastRoundWords);
+    start(lastRoundMode, lastRoundWords, lastRoundTotal);
   };
+
+  // Practice Missed (50) after 5 rounds
+  if (els.missedBtn) {
+    els.missedBtn.onclick = () => {
+      const words50 = getMissedWordsForReview();
+      start(mode, words50, MISSED_REVIEW_TOTAL);
+    };
+  }
 
   // Change difficulty
   els.restartBtn.onclick = () => {
@@ -327,6 +395,6 @@ document.addEventListener("DOMContentLoaded", () => {
   };
 
   // Initial state
-  applyTimeChoice(); // show OFF in HUD if modal default is off
+  applyTimeChoice();
   els.overlay.style.display = "flex";
 });
