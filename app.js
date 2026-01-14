@@ -1,4 +1,6 @@
-// app.js — single lifeline (flag autoskips), review wrong+flagged only, last50 locked until 50
+// app.js — single lifeline (flag autoskips), review wrong+flagged fraction only,
+// and after review you can still Retry full 10 / Next 10.
+// Works with your exact index.html IDs.
 
 document.addEventListener("DOMContentLoaded", () => {
   const TOTAL = 10;
@@ -28,7 +30,7 @@ document.addEventListener("DOMContentLoaded", () => {
     choices: document.getElementById("choices"),
 
     flagBtn: document.getElementById("flagBtn"),
-    skipBtn: document.getElementById("skipBtn"), // will be hidden/disabled
+    skipBtn: document.getElementById("skipBtn"), // will be hidden
 
     skier: document.getElementById("skier"),
     raceTrack: document.getElementById("raceTrack"),
@@ -116,7 +118,7 @@ document.addEventListener("DOMContentLoaded", () => {
   let timeLeft = 0;
   let timerId = null;
 
-  // base round fixed across retries
+  // base round (fixed across retries)
   let baseWords = null;
   let baseDefs = null;
 
@@ -126,19 +128,19 @@ document.addEventListener("DOMContentLoaded", () => {
   let locked = false;
   let isBuilding = false;
 
-  let round = [];      // active questions
+  let round = [];      // active questions [{word, def, opts, ans}]
   let history = [];    // active history
   let flaggedSet = new Set();
 
-  // track last attempt for round (only need latest attempt!)
-  // latestAttempt = { history, baseWords, baseDefs, attemptNumber, roundNumber }
-  let latestAttempt = null;
+  // last full attempt snapshot (THIS is what review uses)
+  let latestFullAttempt = null; // {roundNumber, attemptNumber, baseWords, baseDefs, history}
 
-  // last 50 (all asked definitions, not just wrong)
+  // last 50 asked (all asked definitions)
   const last50 = []; // {word, def}
 
-  // REVIEW MODE flag
-  let inReviewMode = false;
+  // mode flags
+  let inReviewMode = false; // true when playing a review set
+  let reviewKind = "";      // "wrong" | "last50" | ""
 
   // -------- timer --------
   function stopTimer() {
@@ -150,13 +152,14 @@ document.addEventListener("DOMContentLoaded", () => {
 
   function startTimer() {
     stopTimer();
-    if (timeLimit <= 0) {
+    if (timeLimit <= 0 || inReviewMode) {
       timeLeft = 0;
       els.timer.textContent = "OFF";
       return;
     }
     timeLeft = timeLimit;
     els.timer.textContent = `${timeLeft}s`;
+
     timerId = setInterval(() => {
       timeLeft--;
       els.timer.textContent = `${Math.max(0, timeLeft)}s`;
@@ -205,15 +208,13 @@ document.addEventListener("DOMContentLoaded", () => {
     const asked = Math.min(qIndex + 1, total);
     const answered = history.length;
 
-    // In review mode we show "Review x/y"
     if (inReviewMode) {
-      els.roundPill.textContent = `Review mode`;
-      els.qNum.textContent = `Question ${asked}/${total}`;
+      els.roundPill.textContent = reviewKind === "last50" ? "Review: last 50" : "Review: wrong + flagged";
     } else {
       els.roundPill.textContent = `Round ${roundNumber} · Try ${attemptNumber}`;
-      els.qNum.textContent = `Question ${asked}/${total}`;
     }
 
+    els.qNum.textContent = `Question ${asked}/${total}`;
     els.scoreInline.textContent = `Correct ${correct}/${answered || 0}`;
     els.timer.textContent = (!inReviewMode && timeLimit > 0) ? `${timeLeft}s` : "OFF";
 
@@ -248,7 +249,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
   function buildReviewRoundFromItems(items) {
     const pool = uniqWords(WORDS);
-    const chosen = items.slice(0, items.length); // DO NOT force 10
+    const chosen = items.slice(0, items.length); // do NOT force 10
     const order = shuffle([...Array(chosen.length).keys()]);
     round = order.map((i) => {
       const item = chosen[i];
@@ -257,7 +258,7 @@ document.addEventListener("DOMContentLoaded", () => {
     });
   }
 
-  // -------- rendering --------
+  // -------- render / play --------
   function render() {
     locked = false;
     els.choices.innerHTML = "";
@@ -287,7 +288,7 @@ document.addEventListener("DOMContentLoaded", () => {
       flagged: !!meta.flagged,
     });
 
-    // last50 should track ALL asked items (not only wrong)
+    // last50 tracks ALL asked items (full rounds + review rounds)
     last50.push({ word: q.word, def: q.def });
     if (last50.length > 50) last50.shift();
   }
@@ -314,7 +315,7 @@ document.addEventListener("DOMContentLoaded", () => {
     setTimeout(render, 110);
   }
 
-  // SINGLE LIFELINE: flag auto-skips (no separate Skip logic)
+  // SINGLE OPTION: flag auto-skips
   function flagAndSkip() {
     if (locked) return;
     locked = true;
@@ -341,24 +342,49 @@ document.addEventListener("DOMContentLoaded", () => {
     showResults(true);
   }
 
-  function saveLatestAttempt() {
-    // Save only for NORMAL rounds, not review mode
+  // Save latest full attempt at end of any FULL ROUND attempt (not review)
+  function saveLatestFullAttempt() {
     if (inReviewMode) return;
-
-    latestAttempt = {
+    latestFullAttempt = {
       roundNumber,
       attemptNumber,
-      history: [...history],
       baseWords: baseWords ? [...baseWords] : null,
       baseDefs: baseDefs ? [...baseDefs] : null,
+      history: [...history],
     };
+  }
+
+  function updateResultButtonsVisibility() {
+    // Always allow user to proceed after review:
+    // - Retry full 10
+    // - Next 10
+    // - Review wrong/flagged (based on latest full attempt)
+    // - Review last 50 (only after 50 exists)
+
+    // Retry + Next always visible
+    els.retryBtn.classList.remove("hidden");
+    els.nextBtn.classList.remove("hidden");
+
+    // Review wrong button only if we have a latest full attempt
+    if (latestFullAttempt && latestFullAttempt.history && latestFullAttempt.history.length) {
+      els.reviewWrongBtn.classList.remove("hidden");
+    } else {
+      els.reviewWrongBtn.classList.add("hidden");
+    }
+
+    // Review last 50 only if truly at 50
+    if (last50.length >= 50) els.reviewLast50Btn.classList.remove("hidden");
+    else els.reviewLast50Btn.classList.add("hidden");
+
+    // Medal hidden in review results (optional)
+    if (inReviewMode) els.medalOut.textContent = "";
   }
 
   function showResults(endedByTime) {
     stopTimer();
 
-    // Save attempt so review uses latest attempt
-    saveLatestAttempt();
+    // critical: refresh latestFullAttempt after each full attempt
+    saveLatestFullAttempt();
 
     hide(els.gameCard);
     show(els.resultCard);
@@ -370,27 +396,24 @@ document.addEventListener("DOMContentLoaded", () => {
     els.scoreOut.textContent = String(correct);
     els.pctOut.textContent = String(pct);
 
-    els.resultRoundTitle.textContent = inReviewMode
-      ? `Review complete`
-      : (endedByTime
+    if (inReviewMode) {
+      els.resultRoundTitle.textContent =
+        reviewKind === "last50" ? "Review: last 50 (set complete)" : "Review: wrong + flagged (set complete)";
+      els.roundsHistory.textContent = latestFullAttempt
+        ? `Latest full attempt: Round ${latestFullAttempt.roundNumber} Try ${latestFullAttempt.attemptNumber}`
+        : "";
+      els.medalOut.textContent = "";
+    } else {
+      els.resultRoundTitle.textContent = endedByTime
         ? `Round ${roundNumber} · Try ${attemptNumber} (Time’s up)`
-        : `Round ${roundNumber} · Try ${attemptNumber} complete`);
+        : `Round ${roundNumber} · Try ${attemptNumber} complete`;
 
-    els.medalOut.textContent = inReviewMode ? "" : medalForPct(pct);
+      els.medalOut.textContent = medalForPct(pct);
+      els.roundsHistory.textContent = `Latest full attempt: Round ${roundNumber} Try ${attemptNumber}`;
+    }
 
-    els.roundsHistory.textContent = (!inReviewMode && latestAttempt)
-      ? `Latest attempt: Round ${latestAttempt.roundNumber} Try ${latestAttempt.attemptNumber}`
-      : "";
+    updateResultButtonsVisibility();
 
-    // Review button visibility rules
-    // - Review wrong+flagged always available after a normal attempt
-    if (!inReviewMode) els.reviewWrongBtn.classList.remove("hidden");
-
-    // - Review last50 only when we truly have 50 items
-    if (!inReviewMode && last50.length >= 50) els.reviewLast50Btn.classList.remove("hidden");
-    else els.reviewLast50Btn.classList.add("hidden");
-
-    // Recap
     const header = endedByTime
       ? `<div style="margin:10px 0; font-weight:900;">Time’s up! Here’s your recap:</div>`
       : `<div style="margin:10px 0; font-weight:900;">Recap:</div>`;
@@ -414,22 +437,15 @@ document.addEventListener("DOMContentLoaded", () => {
     });
 
     els.recap.innerHTML = header + items.join("");
-
-    // In review mode, hide retry/next (review should not create loops)
-    if (inReviewMode) {
-      els.retryBtn.classList.add("hidden");
-      els.nextBtn.classList.add("hidden");
-    } else {
-      els.retryBtn.classList.remove("hidden");
-      els.nextBtn.classList.remove("hidden");
-    }
   }
 
   // -------- start modes --------
-  async function startNormalGame({ selectedMode, newBaseRound } = {}) {
+  async function startFullRound({ selectedMode, newBaseRound } = {}) {
     if (isBuilding) return;
     isBuilding = true;
+
     inReviewMode = false;
+    reviewKind = "";
 
     if (selectedMode) mode = selectedMode;
 
@@ -460,18 +476,19 @@ document.addEventListener("DOMContentLoaded", () => {
   }
 
   function startReviewWrongFlaggedLatest() {
-    if (!latestAttempt || !latestAttempt.history || !latestAttempt.history.length) return;
+    if (!latestFullAttempt || !latestFullAttempt.history || !latestFullAttempt.history.length) return;
 
-    // Build review list ONLY from wrong or flagged in latest attempt
-    const bad = latestAttempt.history.filter((h) => !h.ok || h.flagged);
+    // Build ONLY from latest full attempt history, and only wrong/flagged
+    const bad = latestFullAttempt.history.filter((h) => !h.ok || h.flagged);
 
-    // If none missed, do nothing (or you can show a message later)
     if (!bad.length) {
-      els.recap.innerHTML = `<div style="font-weight:900;margin:6px 0;">Nothing to review — you got them all.</div>` + els.recap.innerHTML;
+      // Nothing to review
+      els.recap.innerHTML =
+        `<div style="font-weight:900;margin:6px 0;">Nothing to review — you got them all.</div>` +
+        els.recap.innerHTML;
       return;
     }
 
-    // Unique by correct word
     const seen = new Set();
     const items = [];
     for (const h of bad) {
@@ -481,10 +498,9 @@ document.addEventListener("DOMContentLoaded", () => {
       items.push({ word: h.correct, def: h.def });
     }
 
-    // Review should be ONLY this fraction (no fill to 10)
     inReviewMode = true;
+    reviewKind = "wrong";
 
-    // Review run: no timer
     stopTimer();
     els.timer.textContent = "OFF";
 
@@ -497,7 +513,7 @@ document.addEventListener("DOMContentLoaded", () => {
     hide(els.resultCard);
     show(els.gameCard);
 
-    buildReviewRoundFromItems(items);
+    buildReviewRoundFromItems(items); // fraction only
     updateRaceProgress(0, round.length);
     render();
   }
@@ -505,8 +521,7 @@ document.addEventListener("DOMContentLoaded", () => {
   function startReviewLast50() {
     if (last50.length < 50) return;
 
-    // Review last 50 in sets of 10 (most recent 10 first)
-    // For now: show the most recent 10 unique words from the last50 list
+    // Take most recent 10 unique from last50 (keeps it manageable)
     const items = [];
     const seen = new Set();
     for (let i = last50.length - 1; i >= 0 && items.length < 10; i--) {
@@ -518,6 +533,8 @@ document.addEventListener("DOMContentLoaded", () => {
     }
 
     inReviewMode = true;
+    reviewKind = "last50";
+
     stopTimer();
     els.timer.textContent = "OFF";
 
@@ -545,28 +562,28 @@ document.addEventListener("DOMContentLoaded", () => {
   }
 
   function wireDifficultyButtons() {
-    els.mEasy.onclick = () => { attemptNumber = 1; startNormalGame({ selectedMode: "easy", newBaseRound: true }); els.overlay.style.display = "none"; };
-    els.mMedium.onclick = () => { attemptNumber = 1; startNormalGame({ selectedMode: "medium", newBaseRound: true }); els.overlay.style.display = "none"; };
-    els.mHard.onclick = () => { attemptNumber = 1; startNormalGame({ selectedMode: "hard", newBaseRound: true }); els.overlay.style.display = "none"; };
-    els.mExtreme.onclick = () => { attemptNumber = 1; startNormalGame({ selectedMode: "extreme", newBaseRound: true }); els.overlay.style.display = "none"; };
+    els.mEasy.onclick = () => { attemptNumber = 1; startFullRound({ selectedMode: "easy", newBaseRound: true }); els.overlay.style.display = "none"; };
+    els.mMedium.onclick = () => { attemptNumber = 1; startFullRound({ selectedMode: "medium", newBaseRound: true }); els.overlay.style.display = "none"; };
+    els.mHard.onclick = () => { attemptNumber = 1; startFullRound({ selectedMode: "hard", newBaseRound: true }); els.overlay.style.display = "none"; };
+    els.mExtreme.onclick = () => { attemptNumber = 1; startFullRound({ selectedMode: "extreme", newBaseRound: true }); els.overlay.style.display = "none"; };
   }
 
-  // SINGLE OPTION: hide skip button
+  // SINGLE OPTION: hide Skip entirely
   if (els.skipBtn) els.skipBtn.classList.add("hidden");
-
   els.flagBtn.onclick = flagAndSkip;
 
+  // IMPORTANT: Retry/Next always go to FULL ROUND, even if you’re currently in Review results.
   els.retryBtn.onclick = () => {
-    // Retry = same base words/defs, attempt++
+    // Retry full 10 = same base defs, attempt++
     attemptNumber += 1;
-    startNormalGame({ selectedMode: mode, newBaseRound: false });
+    startFullRound({ selectedMode: mode, newBaseRound: false });
   };
 
   els.nextBtn.onclick = () => {
-    // Next 10 = new words/defs, round++, attempt reset
+    // Next 10 = new defs, round++, attempt reset
     roundNumber += 1;
     attemptNumber = 1;
-    startNormalGame({ selectedMode: mode, newBaseRound: true });
+    startFullRound({ selectedMode: mode, newBaseRound: true });
   };
 
   els.reviewWrongBtn.onclick = startReviewWrongFlaggedLatest;
@@ -588,9 +605,11 @@ document.addEventListener("DOMContentLoaded", () => {
   hide(els.gameCard);
   hide(els.resultCard);
 
-  // hide review buttons until earned
+  // start with review buttons hidden until earned
   els.reviewWrongBtn.classList.add("hidden");
   els.reviewLast50Btn.classList.add("hidden");
 
-  if (!WORDS.length) console.warn("VOCAB_WORDS is empty. Check words.js is loading before app.js.");
+  if (!WORDS.length) {
+    console.warn("VOCAB_WORDS is empty. Check words.js loads before app.js.");
+  }
 });
