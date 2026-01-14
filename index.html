@@ -7,6 +7,7 @@
 
 <style>
 * { box-sizing: border-box; }
+
 body {
   margin: 0;
   padding: 14px;
@@ -20,6 +21,7 @@ body {
 h1 { margin: 0; font-size: 26px; font-weight: 800; }
 .sub { font-size: 13px; opacity: .8; }
 
+/* Cards */
 .card {
   background: rgba(255,255,255,.06);
   border: 1px solid rgba(255,255,255,.14);
@@ -28,20 +30,24 @@ h1 { margin: 0; font-size: 26px; font-weight: 800; }
   margin-top: 14px;
 }
 
-.top {
-  display: grid;
-  grid-template-columns: 1fr 80px;
-  gap: 12px;
-}
-
+/* Top HUD */
 .row {
   display: flex;
   justify-content: space-between;
   align-items: center;
+  gap: 10px;
 }
 
+#timer {
+  font-weight: 800;
+  padding: 2px 8px;
+  border: 1px solid rgba(255,255,255,.25);
+  border-radius: 999px;
+}
+
+/* Definition & choices */
 .definition {
-  margin-top: 8px;
+  margin-top: 10px;
   font-size: 18px;
   min-height: 48px;
 }
@@ -66,30 +72,66 @@ h1 { margin: 0; font-size: 26px; font-weight: 800; }
 
 .choice:hover { background: #1b1b1b; }
 
-.ladder {
+/* Race track */
+.raceWrap { margin-top: 12px; }
+
+.raceTrack {
   position: relative;
-  width: 60px;
-  height: 200px;
-  border-left: 2px solid #444;
-  border-right: 2px solid #444;
+  width: 100%;
+  height: 46px;
+  border-radius: 16px;
+  border: 1px solid rgba(255,255,255,.18);
+  background: rgba(255,255,255,.06);
+  overflow: hidden;
 }
 
-.rung {
+.raceTrack::before {
+  content: "";
   position: absolute;
-  left: 0; right: 0;
-  height: 1px;
-  background: #444;
+  left: 10px;
+  right: 10px;
+  top: 50%;
+  height: 2px;
+  background: rgba(255,255,255,.20);
+  transform: translateY(-50%);
 }
 
-.climber {
+.finish {
   position: absolute;
-  left: 50%;
-  transform: translateX(-50%);
-  bottom: 0;
-  font-size: 20px;
-  transition: bottom .15s ease;
+  right: 10px;
+  top: 50%;
+  transform: translateY(-50%);
+  opacity: .85;
 }
 
+.checkpoint {
+  position: absolute;
+  top: 50%;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  transform: translate(-50%, -50%);
+  background: rgba(255,255,255,.22);
+}
+
+.checkpoint.hit {
+  background: rgba(74,222,128,.95);
+}
+
+.skier {
+  position: absolute;
+  left: 10px;
+  top: 50%;
+  transform: translateY(-50%);
+  font-size: 22px;
+  transition: left .2s ease;
+}
+
+/* Results */
+.ok { color: #4ade80; font-weight: 900; }
+.bad { color: #f87171; font-weight: 900; }
+
+/* Overlay */
 .overlay {
   position: fixed;
   inset: 0;
@@ -122,11 +164,8 @@ h1 { margin: 0; font-size: 26px; font-weight: 800; }
 
 .diff:hover { background: #1b1b1b; }
 
-.ok { color: #4ade80; font-weight: 900; }
-.bad { color: #f87171; font-weight: 900; }
-
 @media(max-width:600px){
-  .top { grid-template-columns: 1fr; }
+  .definition { font-size: 17px; }
 }
 </style>
 </head>
@@ -134,41 +173,47 @@ h1 { margin: 0; font-size: 26px; font-weight: 800; }
 <body>
 
 <h1>GRE Vocab Ladder Quiz</h1>
-<div class="sub">GRE Vocabulary Practice</div>
+<div class="sub">60-second GRE vocabulary race</div>
 
 <!-- GAME -->
-<div class="card top hidden" id="gameCard">
-  <div>
-    <div class="row">
-      <div id="qNum">1/10</div>
-      <div id="scoreInline">0/0</div>
-    </div>
+<div class="card hidden" id="gameCard">
 
-    <div class="definition" id="definition"></div>
-    <div class="choices" id="choices"></div>
+  <div class="row">
+    <div id="qNum">1/10</div>
+    <div id="scoreInline">0/0</div>
+    <div id="timer">60s</div>
   </div>
-<div class="row">
-  <div id="qNum">1/10</div>
-  <div id="scoreInline">0/0</div>
-  <div id="timer">60s</div>
-</div>
-  <div class="ladder">
-    <div class="rung" style="bottom:10%"></div>
-    <div class="rung" style="bottom:20%"></div>
-    <div class="rung" style="bottom:30%"></div>
-    <div class="rung" style="bottom:40%"></div>
-    <div class="rung" style="bottom:50%"></div>
-    <div class="rung" style="bottom:60%"></div>
-    <div class="rung" style="bottom:70%"></div>
-    <div class="rung" style="bottom:80%"></div>
-    <div class="rung" style="bottom:90%"></div>
-    <div class="climber" id="climber">🧗‍♂️</div>
+
+  <div class="raceWrap">
+    <div class="raceTrack" id="raceTrack">
+      <div class="finish">🏁</div>
+
+      <!-- 9 checkpoints -->
+      <div class="checkpoint" style="left:10%"></div>
+      <div class="checkpoint" style="left:20%"></div>
+      <div class="checkpoint" style="left:30%"></div>
+      <div class="checkpoint" style="left:40%"></div>
+      <div class="checkpoint" style="left:50%"></div>
+      <div class="checkpoint" style="left:60%"></div>
+      <div class="checkpoint" style="left:70%"></div>
+      <div class="checkpoint" style="left:80%"></div>
+      <div class="checkpoint" style="left:90%"></div>
+
+      <div class="skier" id="skier">⛷️</div>
+    </div>
   </div>
+
+  <div class="definition" id="definition"></div>
+  <div class="choices" id="choices"></div>
 </div>
 
 <!-- RESULTS -->
 <div class="card hidden" id="resultCard">
-  <div><b>Score:</b> <span id="scoreOut"></span>/10 (<span id="pctOut"></span>%)</div>
+  <div>
+    <b>Score:</b>
+    <span id="scoreOut"></span>/10
+    (<span id="pctOut"></span>%)
+  </div>
 
   <div id="recap" style="margin-top:10px;"></div>
 
@@ -178,7 +223,7 @@ h1 { margin: 0; font-size: 26px; font-weight: 800; }
   </div>
 </div>
 
-<!-- DIFFICULTY -->
+<!-- DIFFICULTY OVERLAY -->
 <div class="overlay" id="difficultyOverlay">
   <div class="modal">
     <h2>Select Difficulty</h2>
