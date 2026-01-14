@@ -14,6 +14,7 @@ document.addEventListener("DOMContentLoaded", () => {
     qNum: document.getElementById("qNum"),
     scoreInline: document.getElementById("scoreInline"),
     timer: document.getElementById("timer"),
+    timeSelect: document.getElementById("timeSelect"),
 
     definition: document.getElementById("definition"),
     choices: document.getElementById("choices"),
@@ -27,6 +28,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
     restartBtn: document.getElementById("restartBtn"),
     nextBtn: document.getElementById("nextBtn"),
+    retryBtn: document.getElementById("retryBtn"),
 
     mEasy: document.getElementById("mEasy"),
     mMedium: document.getElementById("mMedium"),
@@ -35,7 +37,7 @@ document.addEventListener("DOMContentLoaded", () => {
   };
 
   let mode = "medium";
-  let qIndex = 0;
+  let qIndex = 0;     // 0..9 current question index
   let correct = 0;
   let locked = false;
 
@@ -43,9 +45,13 @@ document.addEventListener("DOMContentLoaded", () => {
   let history = [];
   let isBuilding = false;
 
+  // Retry support (same exact round)
+  let lastRoundWords = null; // array of 10 words (in order)
+  let lastRoundMode = "medium";
+
   // Timer
-  const TIME_LIMIT = 60; // seconds
-  let timeLeft = TIME_LIMIT;
+  let timeLimit = 60;
+  let timeLeft = 60;
   let timerId = null;
 
   function shuffle(a){
@@ -73,18 +79,21 @@ document.addEventListener("DOMContentLoaded", () => {
 
   function setButtonsLoading(on){
     if (els.nextBtn) els.nextBtn.disabled = on;
+    if (els.retryBtn) els.retryBtn.disabled = on;
     if (els.restartBtn) els.restartBtn.disabled = on;
+
     if (els.mEasy) els.mEasy.disabled = on;
     if (els.mMedium) els.mMedium.disabled = on;
     if (els.mHard) els.mHard.disabled = on;
     if (els.mExtreme) els.mExtreme.disabled = on;
+
+    if (els.timeSelect) els.timeSelect.disabled = on;
   }
 
-  // --- Race progress: 0 start, 1-9 checkpoints, 10 finish
+  // Race progress: 0 start -> 10 finish
   function updateRaceProgress(answeredCount){
     if (!els.skier || !els.raceTrack) return;
 
-    // track padding (matches CSS: 10px)
     const min = 10;
     const max = els.raceTrack.clientWidth - 10;
     const pct = Math.max(0, Math.min(1, answeredCount / TOTAL));
@@ -92,7 +101,6 @@ document.addEventListener("DOMContentLoaded", () => {
 
     els.skier.style.left = `${x}px`;
 
-    // hit checkpoints for 1..9
     const cps = els.raceTrack.querySelectorAll(".checkpoint");
     cps.forEach((cp, idx) => {
       const cpNumber = idx + 1; // 1..9
@@ -103,12 +111,16 @@ document.addEventListener("DOMContentLoaded", () => {
 
   function updateHUD(){
     const asked = Math.min(qIndex + 1, TOTAL);
-    els.qNum.textContent = `${asked}/${TOTAL}`;
-    els.scoreInline.textContent = `${correct}/${asked}`;
+    const answeredSoFar = qIndex; // questions already answered
+    // Left: "Question 1/10"
+    els.qNum.textContent = `Question ${asked}/${TOTAL}`;
+    // Middle: "Correct 3/7" where 7 = answeredSoFar+1? You want asked count visible.
+    els.scoreInline.textContent = `Correct ${correct}/${asked}`;
+
     if (els.timer) els.timer.textContent = `${timeLeft}s`;
 
-    // progress based on questions answered so far (qIndex)
-    updateRaceProgress(qIndex);
+    // progress based on answered questions
+    updateRaceProgress(answeredSoFar);
   }
 
   function stopTimer(){
@@ -120,7 +132,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
   function startTimer(){
     stopTimer();
-    timeLeft = TIME_LIMIT;
+    timeLeft = timeLimit;
     if (els.timer) els.timer.textContent = `${timeLeft}s`;
 
     timerId = setInterval(() => {
@@ -135,39 +147,16 @@ document.addEventListener("DOMContentLoaded", () => {
   }
 
   function endGameDueToTime(){
-    // lock input and show results as-is
     locked = true;
     if (els.choices) els.choices.innerHTML = "";
     showResults(true);
   }
 
-  async function start(selectedMode){
-    if (isBuilding) return;
-    isBuilding = true;
+  async function buildRoundFromWords(words10){
+    const pool = [...new Set(WORDS)];
+    const defs = await Promise.all(words10.map(w => fetchDef(w)));
 
-    mode = selectedMode || mode || "medium";
-    qIndex = 0;
-    correct = 0;
-    history = [];
-    locked = false;
-
-    // reset race visuals
-    updateRaceProgress(0);
-
-    els.overlay.style.display = "none";
-    els.resultCard.classList.add("hidden");
-    els.gameCard.classList.remove("hidden");
-
-    els.definition.textContent = "Loading definitions…";
-    els.choices.innerHTML = "";
-    setButtonsLoading(true);
-
-    const pool = shuffle([...new Set(WORDS)]);
-    const picked = pool.slice(0, TOTAL);
-
-    const defs = await Promise.all(picked.map(w => fetchDef(w)));
-
-    round = picked.map((word, idx) => {
+    round = words10.map((word, idx) => {
       const opts = [word];
       const d = shuffle(pool.filter(w => w !== word));
       while(opts.length < MODE[mode] && d.length) opts.push(d.pop());
@@ -180,13 +169,54 @@ document.addEventListener("DOMContentLoaded", () => {
         def: defs[idx] || "Definition unavailable."
       };
     });
+  }
+
+  async function start(selectedMode, forceWords10=null){
+    if (isBuilding) return;
+    isBuilding = true;
+
+    mode = selectedMode || mode || "medium";
+    lastRoundMode = mode;
+
+    qIndex = 0;
+    correct = 0;
+    history = [];
+    locked = false;
+
+    // timer from selector (if present)
+    if (els.timeSelect) {
+      const v = parseInt(els.timeSelect.value, 10);
+      if (!Number.isNaN(v)) timeLimit = v;
+    }
+
+    // reset visuals
+    updateRaceProgress(0);
+
+    els.overlay.style.display = "none";
+    els.resultCard.classList.add("hidden");
+    els.gameCard.classList.remove("hidden");
+
+    els.definition.textContent = "Loading definitions…";
+    els.choices.innerHTML = "";
+    setButtonsLoading(true);
+
+    let words10;
+    if (forceWords10 && forceWords10.length === TOTAL) {
+      words10 = [...forceWords10];
+    } else {
+      const pool = shuffle([...new Set(WORDS)]);
+      words10 = pool.slice(0, TOTAL);
+    }
+
+    // store for Retry
+    lastRoundWords = [...words10];
+
+    await buildRoundFromWords(words10);
 
     isBuilding = false;
     setButtonsLoading(false);
 
-    // start 60-second countdown when the quiz is ready to play
     startTimer();
-
     render();
   }
 
@@ -226,9 +256,9 @@ document.addEventListener("DOMContentLoaded", () => {
     });
 
     els.choices.innerHTML = "";
-    qIndex++;
 
-    // move skier to next checkpoint immediately
+    // advance progress immediately
+    qIndex++;
     updateRaceProgress(qIndex);
 
     if(qIndex >= TOTAL){
@@ -266,7 +296,6 @@ document.addEventListener("DOMContentLoaded", () => {
         </div>
       `).join("");
 
-    // If time ended early, also show how many you reached
     if (endedByTime && history.length < TOTAL) {
       els.recap.innerHTML += `<div style="opacity:.8; margin-top:10px;">You answered ${history.length} of ${TOTAL} questions.</div>`;
     }
@@ -278,8 +307,14 @@ document.addEventListener("DOMContentLoaded", () => {
   els.mHard.onclick = () => start("hard");
   els.mExtreme.onclick = () => start("extreme");
 
-  // Next 10 = same difficulty, new round, new timer
+  // Next 10 = same difficulty, new words
   els.nextBtn.onclick = () => start(mode);
+
+  // Retry = same difficulty + same exact 10 words again
+  els.retryBtn.onclick = () => {
+    if (!lastRoundWords) return;
+    start(lastRoundMode, lastRoundWords);
+  };
 
   // Change difficulty
   els.restartBtn.onclick = () => {
