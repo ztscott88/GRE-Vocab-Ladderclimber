@@ -157,14 +157,20 @@ h1{
   border:1px solid #444;
   border-radius:16px;
   padding:18px;
-  width:320px;
+  width:340px;
   text-align:center;
 }
 
 .modal h2{
-  margin:0 0 8px;
+  margin:0 0 6px;
+}
+.modal .hint{
+  margin:0 0 12px;
+  opacity:.85;
+  font-size:13px;
 }
 
+/* Buttons */
 .diff{
   border:1px solid #555;
   background: transparent;
@@ -205,7 +211,7 @@ h1{
 
 @media (max-width:600px){
   .definition{ font-size:17px; }
-  .modal{ width: 92vw; max-width: 360px; }
+  .modal{ width: 92vw; max-width: 380px; }
 }
 </style>
 </head>
@@ -213,7 +219,7 @@ h1{
 <body>
 
 <h1>GRE Vocab Ladder Quiz</h1>
-<div class="sub">60-second GRE vocabulary race</div>
+<div class="sub">GRE vocabulary race</div>
 
 <!-- GAME -->
 <div class="card hidden" id="gameCard">
@@ -227,7 +233,6 @@ h1{
     <div class="raceTrack" id="raceTrack">
       <div class="finish">🏁</div>
 
-      <!-- 9 checkpoints -->
       <div class="checkpoint" style="left:10%"></div>
       <div class="checkpoint" style="left:20%"></div>
       <div class="checkpoint" style="left:30%"></div>
@@ -266,21 +271,46 @@ h1{
 <!-- DIFFICULTY OVERLAY -->
 <div class="overlay" id="difficultyOverlay">
   <div class="modal">
-    <h2>Select Difficulty</h2>
+    <h2>Select time and difficulty</h2>
+    <div class="hint">Pick a timer first, then choose your difficulty.</div>
+
+    <!-- Persisted time selection for app.js -->
+    <input type="hidden" id="timeChoice" value="60" />
 
     <div class="timerLabel">Timer</div>
     <div class="timerRow">
-      <button class="diff" id="t60">60s</button>
-      <button class="diff" id="t90">90s</button>
-      <button class="diff" id="t120">120s</button>
+      <button class="diff timerSelected" id="t60" type="button" data-seconds="60">60s</button>
+      <button class="diff" id="t90" type="button" data-seconds="90">90s</button>
+      <button class="diff" id="t120" type="button" data-seconds="120">120s</button>
     </div>
 
-    <button class="diff" id="mEasy">Easy (3)</button>
-    <button class="diff" id="mMedium">Medium (5)</button>
-    <button class="diff" id="mHard">Hard (6)</button>
-    <button class="diff" id="mExtreme">Extreme (10)</button>
+    <button class="diff" id="mEasy" type="button">Easy (3)</button>
+    <button class="diff" id="mMedium" type="button">Medium (5)</button>
+    <button class="diff" id="mHard" type="button">Hard (6)</button>
+    <button class="diff" id="mExtreme" type="button">Extreme (10)</button>
   </div>
 </div>
+
+<script>
+/* Tiny UI-only script to persist timer selection in the modal */
+document.addEventListener("DOMContentLoaded", () => {
+  const hidden = document.getElementById("timeChoice");
+  const btns = ["t60","t90","t120"].map(id => document.getElementById(id)).filter(Boolean);
+
+  function setSelected(seconds){
+    hidden.value = String(seconds);
+    btns.forEach(b => b.classList.remove("timerSelected"));
+    const hit = btns.find(b => b.dataset.seconds === String(seconds));
+    if (hit) hit.classList.add("timerSelected");
+  }
+
+  btns.forEach(b => {
+    b.addEventListener("click", () => setSelected(parseInt(b.dataset.seconds, 10)));
+  });
+
+  setSelected(parseInt(hidden.value, 10) || 60);
+});
+</script>
 
 <script src="words.js"></script>
 <script src="app.js"></script>
