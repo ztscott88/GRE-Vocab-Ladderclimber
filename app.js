@@ -1,51 +1,80 @@
 document.addEventListener("DOMContentLoaded", () => {
+  "use strict";
+
+  // ---------- Helpers (safe DOM) ----------
+  const $ = (id) => document.getElementById(id);
+  const on = (el, evt, fn) => { if (el) el.addEventListener(evt, fn); };
+
+  function showFatal(msg) {
+    console.error(msg);
+    const box = document.createElement("div");
+    box.style.cssText =
+      "margin-top:12px;padding:12px;border:1px solid rgba(255,255,255,.25);" +
+      "border-radius:12px;background:rgba(255,0,0,.08);color:#fff;font-weight:700;";
+    box.textContent = msg;
+    document.body.prepend(box);
+  }
+
+  // ---------- Config ----------
   const DEFAULT_TOTAL = 10;
-  const LAST50_UNLOCK_ROUNDS = 5; // 5 normal rounds = 50 questions
+  const LAST50_UNLOCK_ROUNDS = 5;
   const LAST50_SIZE = 50;
 
   const LETTERS = "abcdefghij".split("");
   const MODE = { easy: 3, medium: 5, hard: 6, extreme: 10 };
 
+  // ---------- Elements (guarded) ----------
   const els = {
-    overlay: document.getElementById("difficultyOverlay"),
-    gameCard: document.getElementById("gameCard"),
-    resultCard: document.getElementById("resultCard"),
+    overlay: $("difficultyOverlay"),
+    gameCard: $("gameCard"),
+    resultCard: $("resultCard"),
 
-    roundPill: document.getElementById("roundPill"),
-    qNum: document.getElementById("qNum"),
-    scoreInline: document.getElementById("scoreInline"),
-    timer: document.getElementById("timer"),
+    roundPill: $("roundPill"),
+    qNum: $("qNum"),
+    scoreInline: $("scoreInline"),
+    timer: $("timer"),
 
-    definition: document.getElementById("definition"),
-    choices: document.getElementById("choices"),
+    definition: $("definition"),
+    choices: $("choices"),
 
-    flagBtn: document.getElementById("flagBtn"),
-    skipBtn: document.getElementById("skipBtn"),
+    flagBtn: $("flagBtn"),
+    skipBtn: $("skipBtn"),
 
-    skier: document.getElementById("skier"),
-    raceTrack: document.getElementById("raceTrack"),
+    skier: $("skier"),
+    raceTrack: $("raceTrack"),
 
-    resultRoundTitle: document.getElementById("resultRoundTitle"),
-    medalOut: document.getElementById("medalOut"),
-    scoreOut: document.getElementById("scoreOut"),
-    totalOut: document.getElementById("totalOut"),
-    pctOut: document.getElementById("pctOut"),
-    recap: document.getElementById("recap"),
+    resultRoundTitle: $("resultRoundTitle"),
+    medalOut: $("medalOut"),
+    scoreOut: $("scoreOut"),
+    totalOut: $("totalOut"),
+    pctOut: $("pctOut"),
+    recap: $("recap"),
+    roundsHistory: $("roundsHistory"),
 
-    retryBtn: document.getElementById("retryBtn"),
-    nextBtn: document.getElementById("nextBtn"),
-    reviewWrongBtn: document.getElementById("reviewWrongBtn"),
-    reviewLast50Btn: document.getElementById("reviewLast50Btn"),
-    restartBtn: document.getElementById("restartBtn"),
-    roundsHistory: document.getElementById("roundsHistory"),
+    retryBtn: $("retryBtn"),
+    nextBtn: $("nextBtn"),
+    reviewWrongBtn: $("reviewWrongBtn"),
+    reviewLast50Btn: $("reviewLast50Btn"),
+    restartBtn: $("restartBtn"),
 
-    mEasy: document.getElementById("mEasy"),
-    mMedium: document.getElementById("mMedium"),
-    mHard: document.getElementById("mHard"),
-    mExtreme: document.getElementById("mExtreme"),
+    mEasy: $("mEasy"),
+    mMedium: $("mMedium"),
+    mHard: $("mHard"),
+    mExtreme: $("mExtreme"),
 
-    timeChoice: document.getElementById("timeChoice"),
+    timeChoice: $("timeChoice"),
   };
+
+  // Minimum required elements to run the game UI
+  const required = [
+    els.overlay, els.gameCard, els.resultCard,
+    els.definition, els.choices,
+    els.mEasy, els.mMedium, els.mHard, els.mExtreme
+  ];
+  if (required.some(x => !x)) {
+    showFatal("app.js failed: missing required element IDs in index.html. (Check difficultyOverlay, gameCard, resultCard, definition, choices, mEasy/mMedium/mHard/mExtreme.)");
+    return;
+  }
 
   // ---------- Utils ----------
   function shuffle(a) {
@@ -63,7 +92,7 @@ document.addEventListener("DOMContentLoaded", () => {
     return /^definition\s*:/i.test(replaced) ? replaced : `Definition: ${replaced}`;
   }
 
-  // ---------- Vocab detection ----------
+  // ---------- Vocab load (robust) ----------
   function detectRawVocab() {
     const direct = [
       window.VOCAB_WORDS, window.WORDS, window.VOCAB, window.GRE_WORDS, window.GREG_WORDS
@@ -73,21 +102,18 @@ document.addEventListener("DOMContentLoaded", () => {
       if (Array.isArray(c) && c.length) return c;
     }
 
-    let best = null;
-    let bestLen = 0;
-
+    // fallback: largest array-ish vocab on window
+    let best = null, bestLen = 0;
     for (const k of Object.keys(window)) {
       try {
         const v = window[k];
         if (!Array.isArray(v) || v.length < 50) continue;
         const sample = v[0];
-        const ok =
-          typeof sample === "string" ||
+        const ok = typeof sample === "string" ||
           (Array.isArray(sample) && sample.length >= 1) ||
           (sample && typeof sample === "object");
         if (ok && v.length > bestLen) {
-          best = v;
-          bestLen = v.length;
+          best = v; bestLen = v.length;
         }
       } catch {}
     }
@@ -104,6 +130,7 @@ document.addEventListener("DOMContentLoaded", () => {
       const key = word.toLowerCase();
       if (seen.has(key)) return;
       seen.add(key);
+
       out.push({ word, def: sanitizeDefinition(d, word) });
     };
 
@@ -129,17 +156,18 @@ document.addEventListener("DOMContentLoaded", () => {
     els.overlay.style.display = "none";
     els.gameCard.classList.remove("hidden");
     els.definition.textContent =
-      "Error: word list not loaded. Make sure words.js is in the same folder and sets a vocab array.";
+      "Error: word list not loaded. Make sure words.js is in the same folder and defines a vocab array (e.g., window.VOCAB_WORDS = [...]).";
     els.choices.innerHTML = "";
     return false;
   }
 
-  // ---------- Definition cache (pins definitions for Retry) ----------
+  // ---------- Definition cache (pins defs for Retry) ----------
   const defCache = new Map(); // wordLower -> defExact
 
   async function fetchDefinition(word) {
     const key = word.toLowerCase();
     if (defCache.has(key)) return defCache.get(key);
+
     try {
       const r = await fetch(`https://api.dictionaryapi.dev/api/v2/entries/en/${encodeURIComponent(word)}`);
       const d = await r.json();
@@ -159,23 +187,23 @@ document.addEventListener("DOMContentLoaded", () => {
   let total = DEFAULT_TOTAL;
 
   let roundNumber = 1;
-  const roundsLog = []; // {round, score, total, pct, medal}
+  const roundsLog = [];
 
   let qIndex = 0;
   let correct = 0;
   let locked = false;
 
-  let round = [];   // [{word, def, opts, ans}]
-  let history = []; // [{def, correct, picked, ok, flagged}]
+  let round = [];     // questions
+  let history = [];   // recap
 
-  let lastBase = null; // [{word, defExact}]
+  let lastBase = null; // pinned {word, defExact}
   let lastMode = "medium";
   let lastTotal = DEFAULT_TOTAL;
 
   const missedSet = new Set();
   const flaggedSet = new Set();
 
-  const last50Queue = []; // [{word, defExact}]
+  const last50Queue = [];
   let normalRoundsCompleted = 0;
 
   let currentFlagged = false;
@@ -198,7 +226,7 @@ document.addEventListener("DOMContentLoaded", () => {
     const t = readTimeChoice();
     timerEnabled = t.enabled;
     timeLimit = t.seconds;
-    els.timer.textContent = timerEnabled ? `${timeLimit}s` : "OFF";
+    if (els.timer) els.timer.textContent = timerEnabled ? `${timeLimit}s` : "OFF";
   }
 
   function stopTimer() {
@@ -208,14 +236,14 @@ document.addEventListener("DOMContentLoaded", () => {
   function startTimer() {
     stopTimer();
     if (!timerEnabled) {
-      els.timer.textContent = "OFF";
+      if (els.timer) els.timer.textContent = "OFF";
       return;
     }
     timeLeft = timeLimit;
-    els.timer.textContent = `${timeLeft}s`;
+    if (els.timer) els.timer.textContent = `${timeLeft}s`;
     timerId = setInterval(() => {
       timeLeft--;
-      els.timer.textContent = `${timeLeft}s`;
+      if (els.timer) els.timer.textContent = `${timeLeft}s`;
       if (timeLeft <= 0) {
         stopTimer();
         endGame(true);
@@ -223,8 +251,10 @@ document.addEventListener("DOMContentLoaded", () => {
     }, 1000);
   }
 
-  // ---------- UI helpers ----------
+  // ---------- UI ----------
   function updateRaceProgress(answered) {
+    if (!els.skier || !els.raceTrack) return;
+
     const pct = Math.max(0, Math.min(1, answered / total));
     const min = 10;
     const max = els.raceTrack.clientWidth - 10;
@@ -239,11 +269,18 @@ document.addEventListener("DOMContentLoaded", () => {
 
   function updateHUD() {
     const asked = Math.min(qIndex + 1, total);
-    els.roundPill.textContent = `Round ${roundNumber}`;
-    els.qNum.textContent = `Question ${asked}/${total}`;
-    els.scoreInline.textContent = `Correct ${correct}/${asked}`;
-    els.timer.textContent = timerEnabled ? `${timeLeft}s` : "OFF";
+
+    if (els.roundPill) els.roundPill.textContent = `Round ${roundNumber}`;
+    if (els.qNum) els.qNum.textContent = `Question ${asked}/${total}`;
+    if (els.scoreInline) els.scoreInline.textContent = `Correct ${correct}/${asked}`;
+    if (els.timer) els.timer.textContent = timerEnabled ? `${timeLeft}s` : "OFF";
+
     updateRaceProgress(qIndex);
+  }
+
+  function setFlagUI(onFlag) {
+    currentFlagged = !!onFlag;
+    if (els.flagBtn) els.flagBtn.classList.toggle("on", currentFlagged);
   }
 
   function medalForPct(pct) {
@@ -260,6 +297,11 @@ document.addEventListener("DOMContentLoaded", () => {
       `Round ${r.round}: ${r.medal.icon} ${r.medal.name} (${r.score}/${r.total})`
     );
     els.roundsHistory.textContent = "Recent rounds: " + recent.join(" • ");
+  }
+
+  function pushToLast50(word, defExact) {
+    last50Queue.push({ word, defExact });
+    while (last50Queue.length > LAST50_SIZE) last50Queue.shift();
   }
 
   // ---------- Round building ----------
@@ -283,7 +325,7 @@ document.addEventListener("DOMContentLoaded", () => {
       defExact = sanitizeDefinition(defExact, word) || defExact;
       defCache.set(word.toLowerCase(), defExact);
 
-      const optCount = MODE[mode];
+      const optCount = MODE[mode] || 5;
       const opts = [word, ...distractors(word, optCount - 1)];
       shuffle(opts);
 
@@ -297,28 +339,16 @@ document.addEventListener("DOMContentLoaded", () => {
     return questions;
   }
 
-  // ---------- Last 50 tracking ----------
-  function pushToLast50(word, defExact) {
-    last50Queue.push({ word, defExact });
-    while (last50Queue.length > LAST50_SIZE) last50Queue.shift();
-  }
-
-  // ---------- Rendering ----------
-  function setFlagUI(on) {
-    currentFlagged = !!on;
-    if (currentFlagged) els.flagBtn.classList.add("on");
-    else els.flagBtn.classList.remove("on");
-  }
-
+  // ---------- Render ----------
   function renderQuestion() {
     locked = false;
-    els.choices.innerHTML = "";
     setFlagUI(false);
+    if (els.choices) els.choices.innerHTML = "";
 
     updateHUD();
 
     const q = round[qIndex];
-    els.definition.textContent = q.def || "Definition unavailable.";
+    if (els.definition) els.definition.textContent = q?.def || "Definition unavailable.";
 
     q.opts.forEach((opt, i) => {
       const btn = document.createElement("button");
@@ -355,8 +385,11 @@ document.addEventListener("DOMContentLoaded", () => {
 
     qIndex++;
 
-    els.choices.querySelectorAll("button").forEach(b => b.blur());
-    els.choices.innerHTML = "";
+    // prevent carryover highlight/focus
+    if (els.choices) {
+      els.choices.querySelectorAll("button").forEach(b => b.blur());
+      els.choices.innerHTML = "";
+    }
 
     if (qIndex >= total) {
       endGame(false);
@@ -385,8 +418,10 @@ document.addEventListener("DOMContentLoaded", () => {
 
     qIndex++;
 
-    els.choices.querySelectorAll("button").forEach(b => b.blur());
-    els.choices.innerHTML = "";
+    if (els.choices) {
+      els.choices.querySelectorAll("button").forEach(b => b.blur());
+      els.choices.innerHTML = "";
+    }
 
     if (qIndex >= total) {
       endGame(false);
@@ -415,11 +450,11 @@ document.addEventListener("DOMContentLoaded", () => {
     els.resultCard.classList.add("hidden");
     els.gameCard.classList.remove("hidden");
 
-    els.definition.textContent = "Loading definitions…";
-    els.choices.innerHTML = "";
+    if (els.definition) els.definition.textContent = "Loading definitions…";
+    if (els.choices) els.choices.innerHTML = "";
 
-    els.reviewWrongBtn.classList.add("hidden");
-    els.reviewLast50Btn.classList.add("hidden");
+    if (els.reviewWrongBtn) els.reviewWrongBtn.classList.add("hidden");
+    if (els.reviewLast50Btn) els.reviewLast50Btn.classList.add("hidden");
 
     let base = baseOverride
       ? baseOverride.map(x => ({ word: x.word, defExact: x.defExact }))
@@ -427,6 +462,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
     if (shuffleOrder) base = shuffle(base);
 
+    // pin base for retry (defs pinned by cache)
     lastBase = base.map(x => ({
       word: x.word,
       defExact: defCache.get(x.word.toLowerCase()) || x.defExact || ""
@@ -449,31 +485,33 @@ document.addEventListener("DOMContentLoaded", () => {
     const pct = Math.round((correct / total) * 100);
     const medal = medalForPct(pct);
 
-    els.resultRoundTitle.textContent = `Round ${roundNumber} Results`;
-    els.medalOut.textContent = `${medal.icon} ${medal.name} Medal`;
+    if (els.resultRoundTitle) els.resultRoundTitle.textContent = `Round ${roundNumber} Results`;
+    if (els.medalOut) els.medalOut.textContent = `${medal.icon} ${medal.name} Medal`;
 
-    els.scoreOut.textContent = String(correct);
-    els.totalOut.textContent = String(total);
-    els.pctOut.textContent = String(pct);
+    if (els.scoreOut) els.scoreOut.textContent = String(correct);
+    if (els.totalOut) els.totalOut.textContent = String(total);
+    if (els.pctOut) els.pctOut.textContent = String(pct);
 
     const header = endedByTime
       ? `<div style="margin:10px 0;font-weight:800;">Time’s up. Recap:</div>`
       : "";
 
-    els.recap.innerHTML =
-      header +
-      history.map((h, idx) => `
-        <div style="margin-bottom:12px;">
-          <div class="muted"><b>Q${idx + 1}.</b> ${h.def || "Definition unavailable."}</div>
-          <div>
-            <b>Correct:</b> <span class="ok">${h.correct}</span>
-            &nbsp;|&nbsp;
-            <b>You:</b> <span class="${h.ok ? "ok" : "bad"}">${h.picked}</span>
-            ${h.flagged ? `<span class="muted" style="margin-left:8px;">(flagged)</span>` : ""}
-            <span class="${h.ok ? "ok" : "bad"}" style="margin-left:6px;">${h.ok ? "✔" : "✖"}</span>
+    if (els.recap) {
+      els.recap.innerHTML =
+        header +
+        history.map((h, idx) => `
+          <div style="margin-bottom:12px;">
+            <div class="muted"><b>Q${idx + 1}.</b> ${h.def || "Definition unavailable."}</div>
+            <div>
+              <b>Correct:</b> <span class="ok">${h.correct}</span>
+              &nbsp;|&nbsp;
+              <b>You:</b> <span class="${h.ok ? "ok" : "bad"}">${h.picked}</span>
+              ${h.flagged ? `<span class="muted" style="margin-left:8px;">(flagged)</span>` : ""}
+              <span class="${h.ok ? "ok" : "bad"}" style="margin-left:6px;">${h.ok ? "✔" : "✖"}</span>
+            </div>
           </div>
-        </div>
-      `).join("");
+        `).join("");
+    }
 
     roundsLog.push({ round: roundNumber, score: correct, total, pct, medal });
     renderRoundsLog();
@@ -481,10 +519,10 @@ document.addEventListener("DOMContentLoaded", () => {
     if (total === DEFAULT_TOTAL) normalRoundsCompleted++;
 
     const wrongPlusFlaggedCount = new Set([...missedSet, ...flaggedSet]).size;
-    if (wrongPlusFlaggedCount > 0) els.reviewWrongBtn.classList.remove("hidden");
+    if (els.reviewWrongBtn && wrongPlusFlaggedCount > 0) els.reviewWrongBtn.classList.remove("hidden");
 
     const last50Unlocked = normalRoundsCompleted >= LAST50_UNLOCK_ROUNDS && last50Queue.length >= LAST50_SIZE;
-    if (last50Unlocked) els.reviewLast50Btn.classList.remove("hidden");
+    if (els.reviewLast50Btn && last50Unlocked) els.reviewLast50Btn.classList.remove("hidden");
 
     roundNumber++;
   }
@@ -493,6 +531,7 @@ document.addEventListener("DOMContentLoaded", () => {
   function buildReviewWrongFlagged() {
     const set = new Set([...missedSet, ...flaggedSet]);
     const list = Array.from(set);
+
     const base = list.map(wLower => {
       const match = VOCAB.find(v => v.word.toLowerCase() === wLower);
       const word = match ? match.word : wLower;
@@ -507,54 +546,48 @@ document.addEventListener("DOMContentLoaded", () => {
   }
 
   // ---------- Wiring ----------
-  // Timer buttons
+  // Timer buttons in modal: any element with [data-time]
   document.querySelectorAll("[data-time]").forEach(btn => {
     btn.addEventListener("click", () => {
       document.querySelectorAll("[data-time]").forEach(b => b.classList.remove("timerSelected"));
       btn.classList.add("timerSelected");
-      els.timeChoice.value = btn.dataset.time;
+      if (els.timeChoice) els.timeChoice.value = btn.dataset.time;
     });
   });
 
-  // In-question buttons
-  els.flagBtn.addEventListener("click", () => setFlagUI(!currentFlagged));
-  els.skipBtn.addEventListener("click", () => skipQuestion());
+  on(els.flagBtn, "click", () => setFlagUI(!currentFlagged));
+  on(els.skipBtn, "click", () => skipQuestion());
 
-  // Difficulty
-  els.mEasy.addEventListener("click", () => startGame("easy"));
-  els.mMedium.addEventListener("click", () => startGame("medium"));
-  els.mHard.addEventListener("click", () => startGame("hard"));
-  els.mExtreme.addEventListener("click", () => startGame("extreme"));
+  on(els.mEasy, "click", () => startGame("easy"));
+  on(els.mMedium, "click", () => startGame("medium"));
+  on(els.mHard, "click", () => startGame("hard"));
+  on(els.mExtreme, "click", () => startGame("extreme"));
 
-  // Retry: SAME DEFINITIONS, different order + different distractors ok
-  els.retryBtn.addEventListener("click", () => {
+  on(els.retryBtn, "click", () => {
     if (!lastBase) return;
     const baseForRetry = lastBase.map(x => ({
       word: x.word,
       defExact: defCache.get(x.word.toLowerCase()) || x.defExact || ""
     }));
+    // same defs, new order & new distractors
     startGame(lastMode, baseForRetry, lastTotal, true);
   });
 
-  // Next 10
-  els.nextBtn.addEventListener("click", () => startGame(mode, null, DEFAULT_TOTAL, false));
+  on(els.nextBtn, "click", () => startGame(mode, null, DEFAULT_TOTAL, false));
 
-  // Review Wrong + Flagged
-  els.reviewWrongBtn.addEventListener("click", () => {
+  on(els.reviewWrongBtn, "click", () => {
     const base = buildReviewWrongFlagged();
     if (!base.length) return;
     startGame(mode, base, base.length, false);
   });
 
-  // Review Last 50
-  els.reviewLast50Btn.addEventListener("click", () => {
+  on(els.reviewLast50Btn, "click", () => {
     const base = buildReviewLast50();
     if (base.length < LAST50_SIZE) return;
     startGame(mode, base, base.length, false);
   });
 
-  // Change difficulty
-  els.restartBtn.addEventListener("click", () => {
+  on(els.restartBtn, "click", () => {
     stopTimer();
     els.overlay.style.display = "flex";
     els.gameCard.classList.add("hidden");
