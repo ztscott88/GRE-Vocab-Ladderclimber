@@ -140,6 +140,7 @@ h1{
 /* Results */
 .ok{ color:#4ade80; font-weight:900; }
 .bad{ color:#f87171; font-weight:900; }
+.muted{ opacity:.82; }
 
 /* Overlay + modal */
 .overlay{
@@ -157,7 +158,7 @@ h1{
   border:1px solid #444;
   border-radius:16px;
   padding:18px;
-  width:340px;
+  width:360px;
   text-align:center;
 }
 
@@ -203,7 +204,7 @@ h1{
   margin:0;
 }
 
-/* Highlight selected timer */
+/* Selected timer */
 .timerSelected{
   border-color: rgba(74,222,128,.95) !important;
   box-shadow: 0 0 0 2px rgba(74,222,128,.15);
@@ -211,7 +212,7 @@ h1{
 
 @media (max-width:600px){
   .definition{ font-size:17px; }
-  .modal{ width: 92vw; max-width: 380px; }
+  .modal{ width: 92vw; max-width: 420px; }
 }
 </style>
 </head>
@@ -226,7 +227,7 @@ h1{
   <div class="row">
     <div id="qNum">Question 1/10</div>
     <div id="scoreInline">Correct 0/0</div>
-    <div id="timer">60s</div>
+    <div id="timer">OFF</div>
   </div>
 
   <div class="raceWrap">
@@ -262,9 +263,9 @@ h1{
   <div id="recap" style="margin-top:10px;"></div>
 
   <div style="margin-top:12px; display:flex; gap:10px; flex-wrap:wrap;">
-    <button id="retryBtn" class="diff">Retry</button>
-    <button id="nextBtn" class="diff">Next 10</button>
-    <button id="restartBtn" class="diff">Change Difficulty</button>
+    <button id="retryBtn" class="diff" type="button">Retry</button>
+    <button id="nextBtn" class="diff" type="button">Next 10</button>
+    <button id="restartBtn" class="diff" type="button">Change Difficulty</button>
   </div>
 </div>
 
@@ -272,14 +273,15 @@ h1{
 <div class="overlay" id="difficultyOverlay">
   <div class="modal">
     <h2>Select time and difficulty</h2>
-    <div class="hint">Pick a timer first, then choose your difficulty.</div>
+    <div class="hint">Pick a timer first (or OFF), then choose your difficulty.</div>
 
     <!-- Persisted time selection for app.js -->
-    <input type="hidden" id="timeChoice" value="60" />
+    <input type="hidden" id="timeChoice" value="off" />
 
     <div class="timerLabel">Timer</div>
     <div class="timerRow">
-      <button class="diff timerSelected" id="t60" type="button" data-seconds="60">60s</button>
+      <button class="diff timerSelected" id="tOff" type="button" data-seconds="off">OFF</button>
+      <button class="diff" id="t60" type="button" data-seconds="60">60s</button>
       <button class="diff" id="t90" type="button" data-seconds="90">90s</button>
       <button class="diff" id="t120" type="button" data-seconds="120">120s</button>
     </div>
@@ -292,23 +294,22 @@ h1{
 </div>
 
 <script>
-/* Tiny UI-only script to persist timer selection in the modal */
+/* UI-only: persist timer selection */
 document.addEventListener("DOMContentLoaded", () => {
   const hidden = document.getElementById("timeChoice");
-  const btns = ["t60","t90","t120"].map(id => document.getElementById(id)).filter(Boolean);
+  const btnIds = ["tOff","t60","t90","t120"];
+  const btns = btnIds.map(id => document.getElementById(id)).filter(Boolean);
 
-  function setSelected(seconds){
-    hidden.value = String(seconds);
+  function setSelected(val){
+    hidden.value = String(val);
     btns.forEach(b => b.classList.remove("timerSelected"));
-    const hit = btns.find(b => b.dataset.seconds === String(seconds));
+    const hit = btns.find(b => b.dataset.seconds === String(val));
     if (hit) hit.classList.add("timerSelected");
   }
 
-  btns.forEach(b => {
-    b.addEventListener("click", () => setSelected(parseInt(b.dataset.seconds, 10)));
-  });
+  btns.forEach(b => b.addEventListener("click", () => setSelected(b.dataset.seconds)));
 
-  setSelected(parseInt(hidden.value, 10) || 60);
+  setSelected(hidden.value || "off");
 });
 </script>
 
