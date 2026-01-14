@@ -30,129 +30,151 @@ document.addEventListener("DOMContentLoaded", () => {
 
   let mode, qIndex, correct, round, history, locked;
 
-  function shuffle(a){
-    for(let i=a.length-1;i>0;i--){
-      const j=Math.floor(Math.random()*(i+1));
-      [a[i],a[j]]=[a[j],a[i]];
+  function shuffle(arr){
+    for(let i = arr.length - 1; i > 0; i--){
+      const j = Math.floor(Math.random() * (i + 1));
+      [arr[i], arr[j]] = [arr[j], arr[i]];
     }
-    return a;
+    return arr;
   }
 
-  function start(m){
-    mode=m;
-    qIndex=0;
-    correct=0;
-    history=[];
-    locked=false;
+  function start(selected){
+    mode = selected;
+    qIndex = 0;
+    correct = 0;
+    history = [];
+    locked = false;
 
-    els.overlay.style.display="none";
+    els.overlay.style.display = "none";
     els.resultCard.classList.add("hidden");
     els.gameCard.classList.remove("hidden");
 
     buildRound();
-    render();
+    renderQuestion();
   }
 
   function buildRound(){
-    const pool=shuffle([...new Set(WORDS)]);
-    round=pool.slice(0,TOTAL).map(w=>{
-      const opts=[w];
-      const d=shuffle(pool.filter(x=>x!==w));
-      while(opts.length<MODE[mode]) opts.push(d.pop());
+    const pool = shuffle([...new Set(WORDS)]);
+    round = pool.slice(0, TOTAL).map(word => {
+      const opts = [word];
+      const distractors = shuffle(pool.filter(w => w !== word));
+      while (opts.length < MODE[mode]) opts.push(distractors.pop());
       shuffle(opts);
-      return { word:w, opts, ans:opts.indexOf(w) };
+      return { word, opts, ans: opts.indexOf(word), def: "" };
     });
   }
 
   function updateHUD(){
-    els.qNum.textContent=`${qIndex+1}/${TOTAL}`;
-    els.scoreInline.textContent=`${correct}/${qIndex+1}`;
-    els.climber.style.bottom=`${correct*10}%`;
+    els.qNum.textContent = `${qIndex + 1}/${TOTAL}`;
+    els.scoreInline.textContent = `${correct}/${qIndex + 1}`;
+    els.climber.style.bottom = `${correct * 10}%`;
   }
 
-  function render(){
-    locked=false;
-    els.choices.innerHTML="";
+  function renderQuestion(){
+    locked = false;
+    els.choices.innerHTML = "";
     document.activeElement && document.activeElement.blur();
 
     updateHUD();
 
-    const q=round[qIndex];
-    els.definition.textContent="Loading definition…";
+    const q = round[qIndex];
+    els.definition.textContent = "Loading definition…";
 
-    q.opts.forEach((opt,i)=>{
-      const b=document.createElement("button");
-      b.className="choice";
-      b.type="button";
-      b.innerHTML=`<b>${LETTERS[i]}.</b> ${opt}`;
-      b.onclick=()=>select(i);
-      els.choices.appendChild(b);
+    q.opts.forEach((opt, i) => {
+      const btn = document.createElement("button");
+      btn.className = "choice";
+      btn.type = "button";
+      btn.innerHTML = `<b>${LETTERS[i]}.</b> ${opt}`;
+      btn.onclick = () => selectAnswer(i);
+      els.choices.appendChild(btn);
     });
 
-    // 🚫 IMPORTANT: never fetch on last question
-    if(qIndex < TOTAL-1){
-      loadDef(q);
+    // IMPORTANT: do not fetch on last question (Safari safety)
+    if (qIndex < TOTAL - 1) {
+      loadDefinition(q);
     } else {
-      els.definition.textContent="Final question — choose carefully.";
+      els.definition.textContent = "Final question — choose the best answer.";
+      q.def = els.definition.textContent;
     }
   }
 
-  async function loadDef(q){
+  async function loadDefinition(q){
     try{
-      const r=await fetch(`https://api.dictionaryapi.dev/api/v2/entries/en/${q.word}`);
-      const d=await r.json();
-      const def=d?.[0]?.meanings?.[0]?.definitions?.[0]?.definition;
-      els.definition.textContent = def
-        ? def.replace(new RegExp(`\\b${q.word}\\b`,"ig"),"_____")
+      const r = await fetch(
+        `https://api.dictionaryapi.dev/api/v2/entries/en/${encodeURIComponent(q.word)}`
+      );
+      const d = await r.json();
+      const def = d?.[0]?.meanings?.[0]?.definitions?.[0]?.definition;
+      q.def = def
+        ? def.replace(new RegExp(`\\b${q.word}\\b`, "ig"), "_____")
         : "Definition unavailable.";
-    }catch{
-      els.definition.textContent="Definition unavailable.";
+      els.definition.textContent = q.def;
+    } catch {
+      q.def = "Definition unavailable.";
+      els.definition.textContent = q.def;
     }
   }
 
-  function select(i){
-    if(locked) return;
-    locked=true;
+  function selectAnswer(i){
+    if (locked) return;
+    locked = true;
 
-    const q=round[qIndex];
-    const ok=i===q.ans;
-    if(ok) correct++;
+    const q = round[qIndex];
+    const ok = i === q.ans;
+    if (ok) correct++;
 
-    history.push({ word:q.word, picked:q.opts[i], ok });
+    history.push({
+      def: q.def || els.definition.textContent,
+      correct: q.word,
+      picked: q.opts[i],
+      ok
+    });
 
-    // HARD EXIT before any async can interfere
-    if(qIndex === TOTAL-1){
+    // HARD STOP interactions
+    els.choices.innerHTML = "";
+
+    // FINAL QUESTION → results immediately (no async)
+    if (qIndex === TOTAL - 1) {
       showResults();
       return;
     }
 
     qIndex++;
-    setTimeout(render,100);
+    setTimeout(renderQuestion, 120);
   }
 
   function showResults(){
-    els.choices.innerHTML="";
     els.gameCard.classList.add("hidden");
     els.resultCard.classList.remove("hidden");
 
-    els.scoreOut.textContent=correct;
-    els.pctOut.textContent=Math.round(correct/TOTAL*100);
+    els.scoreOut.textContent = correct;
+    els.pctOut.textContent = Math.round((correct / TOTAL) * 100);
 
-    els.recap.innerHTML=history.map((h,i)=>`
-      <div>
-        Q${i+1}: <b>${h.word}</b> → ${h.picked}
-        <span class="${h.ok?"ok":"bad"}">${h.ok?"✔":"✖"}</span>
+    els.recap.innerHTML = history.map((h, i) => `
+      <div class="recapItem">
+        <div class="muted">
+          <b>Q${i + 1} Definition:</b><br>${h.def}
+        </div>
+        <div>
+          <b>Correct:</b> ${h.correct}
+          &nbsp; | &nbsp;
+          <b>You:</b> ${h.picked}
+          <span class="${h.ok ? "ok" : "bad"}">
+            ${h.ok ? "✔" : "✖"}
+          </span>
+        </div>
       </div>
     `).join("");
   }
 
-  els.mEasy.onclick=()=>start("easy");
-  els.mMedium.onclick=()=>start("medium");
-  els.mHard.onclick=()=>start("hard");
-  els.mExtreme.onclick=()=>start("extreme");
+  // Difficulty buttons
+  els.mEasy.onclick = () => start("easy");
+  els.mMedium.onclick = () => start("medium");
+  els.mHard.onclick = () => start("hard");
+  els.mExtreme.onclick = () => start("extreme");
 
-  els.restartBtn.onclick=()=>{
-    els.overlay.style.display="flex";
+  els.restartBtn.onclick = () => {
+    els.overlay.style.display = "flex";
     els.gameCard.classList.add("hidden");
     els.resultCard.classList.add("hidden");
   };
