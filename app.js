@@ -37,6 +37,9 @@ document.addEventListener("DOMContentLoaded", () => {
     t60: document.getElementById("t60"),
     t90: document.getElementById("t90"),
     t120: document.getElementById("t120"),
+
+    // ✅ NEW: persisted timer choice in index.html
+    timeChoice: document.getElementById("timeChoice"),
   };
 
   let mode = "medium";
@@ -109,8 +112,18 @@ document.addEventListener("DOMContentLoaded", () => {
     showResults(true);
   }
 
+  // ✅ Reads persisted timer selection from index.html
+  function readTimeChoice(){
+    const raw = els.timeChoice ? els.timeChoice.value : "60";
+    const n = parseInt(raw, 10);
+    return Number.isFinite(n) ? n : 60;
+  }
+
   function setTimerChoice(seconds){
     timeLimit = seconds;
+
+    // ✅ persist selection so it survives and doesn't snap back
+    if (els.timeChoice) els.timeChoice.value = String(seconds);
 
     // highlight selected timer button
     [els.t60, els.t90, els.t120].forEach(b => b && b.classList.remove("timerSelected"));
@@ -172,6 +185,9 @@ document.addEventListener("DOMContentLoaded", () => {
 
     mode = selectedMode || mode || "medium";
     lastRoundMode = mode;
+
+    // ✅ lock in the selected timer at the moment the game starts
+    setTimerChoice(readTimeChoice());
 
     qIndex = 0;
     correct = 0;
@@ -290,8 +306,8 @@ document.addEventListener("DOMContentLoaded", () => {
   if (els.t90) els.t90.onclick = () => setTimerChoice(90);
   if (els.t120) els.t120.onclick = () => setTimerChoice(120);
 
-  // default selection
-  setTimerChoice(60);
+  // ✅ initialize from persisted value (or 60)
+  setTimerChoice(readTimeChoice());
 
   // Difficulty buttons
   els.mEasy.onclick = () => start("easy");
@@ -302,7 +318,7 @@ document.addEventListener("DOMContentLoaded", () => {
   // Next 10 = same difficulty, new words, same selected timer
   els.nextBtn.onclick = () => start(mode);
 
-  // Retry = same difficulty + same exact 10 words
+  // Retry = same difficulty + same exact 10 words (same timer selection)
   els.retryBtn.onclick = () => {
     if (!lastRoundWords) return;
     start(lastRoundMode, lastRoundWords);
