@@ -138,9 +138,11 @@ h1{
 }
 
 /* Results */
-.ok{ color:#4ade80; font-weight:900; }
-.bad{ color:#f87171; font-weight:900; }
 .muted{ opacity:.82; }
+
+/* FORCE recap colors */
+#recap .ok{ color:#4ade80 !important; font-weight:900 !important; }
+#recap .bad{ color:#f87171 !important; font-weight:900 !important; }
 
 /* Overlay + modal */
 .overlay{
@@ -197,10 +199,12 @@ h1{
   display:flex;
   gap:10px;
   margin-bottom:10px;
+  flex-wrap:wrap;
 }
 
 .timerRow .diff{
   flex:1;
+  min-width:72px;
   margin:0;
 }
 
@@ -256,7 +260,7 @@ h1{
 <div class="card hidden" id="resultCard">
   <div>
     <b>Score:</b>
-    <span id="scoreOut"></span>/10
+    <span id="scoreOut"></span>/<span id="totalOut">10</span>
     (<span id="pctOut"></span>%)
   </div>
 
@@ -265,6 +269,7 @@ h1{
   <div style="margin-top:12px; display:flex; gap:10px; flex-wrap:wrap;">
     <button id="retryBtn" class="diff" type="button">Retry</button>
     <button id="nextBtn" class="diff" type="button">Next 10</button>
+    <button id="missedBtn" class="diff hidden" type="button">Practice Missed (50)</button>
     <button id="restartBtn" class="diff" type="button">Change Difficulty</button>
   </div>
 </div>
@@ -294,7 +299,6 @@ h1{
 </div>
 
 <script>
-/* UI-only: persist timer selection */
 document.addEventListener("DOMContentLoaded", () => {
   const hidden = document.getElementById("timeChoice");
   const btnIds = ["tOff","t60","t90","t120"];
