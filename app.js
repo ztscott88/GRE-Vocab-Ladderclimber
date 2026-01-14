@@ -34,11 +34,7 @@ document.addEventListener("DOMContentLoaded", () => {
     mHard: document.getElementById("mHard"),
     mExtreme: document.getElementById("mExtreme"),
 
-    t60: document.getElementById("t60"),
-    t90: document.getElementById("t90"),
-    t120: document.getElementById("t120"),
-
-    // ✅ NEW: persisted timer choice in index.html
+    // optional: buttons exist in index but app.js doesn't need to bind them
     timeChoice: document.getElementById("timeChoice"),
   };
 
@@ -56,7 +52,8 @@ document.addEventListener("DOMContentLoaded", () => {
   let lastRoundMode = "medium";
 
   // Timer
-  let timeLimit = 60; // selected in modal
+  let timerEnabled = false;
+  let timeLimit = 60;
   let timeLeft = 60;
   let timerId = null;
 
@@ -92,6 +89,12 @@ document.addEventListener("DOMContentLoaded", () => {
 
   function startTimer(){
     stopTimer();
+
+    if (!timerEnabled) {
+      if (els.timer) els.timer.textContent = "OFF";
+      return;
+    }
+
     timeLeft = timeLimit;
     if (els.timer) els.timer.textContent = `${timeLeft}s`;
 
@@ -112,24 +115,22 @@ document.addEventListener("DOMContentLoaded", () => {
     showResults(true);
   }
 
-  // ✅ Reads persisted timer selection from index.html
   function readTimeChoice(){
-    const raw = els.timeChoice ? els.timeChoice.value : "60";
+    const raw = els.timeChoice ? String(els.timeChoice.value || "off").toLowerCase() : "off";
+    if (raw === "off" || raw === "0" || raw === "false") {
+      return { enabled:false, seconds:60 };
+    }
     const n = parseInt(raw, 10);
-    return Number.isFinite(n) ? n : 60;
+    if (!Number.isFinite(n) || n <= 0) return { enabled:false, seconds:60 };
+    return { enabled:true, seconds:n };
   }
 
-  function setTimerChoice(seconds){
-    timeLimit = seconds;
+  function applyTimeChoice(){
+    const t = readTimeChoice();
+    timerEnabled = t.enabled;
+    timeLimit = t.seconds;
 
-    // ✅ persist selection so it survives and doesn't snap back
-    if (els.timeChoice) els.timeChoice.value = String(seconds);
-
-    // highlight selected timer button
-    [els.t60, els.t90, els.t120].forEach(b => b && b.classList.remove("timerSelected"));
-    if (seconds === 60 && els.t60) els.t60.classList.add("timerSelected");
-    if (seconds === 90 && els.t90) els.t90.classList.add("timerSelected");
-    if (seconds === 120 && els.t120) els.t120.classList.add("timerSelected");
+    if (els.timer) els.timer.textContent = timerEnabled ? `${timeLimit}s` : "OFF";
   }
 
   // Race progress (0 start -> 10 finish)
@@ -155,8 +156,7 @@ document.addEventListener("DOMContentLoaded", () => {
     const asked = Math.min(qIndex + 1, TOTAL);
     els.qNum.textContent = `Question ${asked}/${TOTAL}`;
     els.scoreInline.textContent = `Correct ${correct}/${asked}`;
-    if (els.timer) els.timer.textContent = `${timeLeft}s`;
-
+    if (els.timer) els.timer.textContent = timerEnabled ? `${timeLeft}s` : "OFF";
     updateRaceProgress(qIndex);
   }
 
@@ -186,8 +186,8 @@ document.addEventListener("DOMContentLoaded", () => {
     mode = selectedMode || mode || "medium";
     lastRoundMode = mode;
 
-    // ✅ lock in the selected timer at the moment the game starts
-    setTimerChoice(readTimeChoice());
+    // lock in timer selection at the moment the run starts
+    applyTimeChoice();
 
     qIndex = 0;
     correct = 0;
@@ -286,12 +286,13 @@ document.addEventListener("DOMContentLoaded", () => {
     els.recap.innerHTML =
       header +
       history.map((h,i)=>`
-        <div style="margin-bottom:10px;">
-          <div class="muted"><b>Q${i+1} Definition:</b><br>${h.def}</div>
+        <div style="margin-bottom:12px;">
+          <div class="muted"><b>Q${i+1}. Definition:</b><br>${h.def}</div>
           <div>
-            <b>Correct:</b> ${h.correct} |
-            <b>You:</b> ${h.picked}
-            <span class="${h.ok ? "ok" : "bad"}">${h.ok ? "✔" : "✖"}</span>
+            <b>Correct:</b> <span class="ok">${h.correct}</span>
+            &nbsp;|&nbsp;
+            <b>You:</b> <span class="${h.ok ? "ok" : "bad"}">${h.picked}</span>
+            <span class="${h.ok ? "ok" : "bad"}" style="margin-left:6px;">${h.ok ? "✔" : "✖"}</span>
           </div>
         </div>
       `).join("");
@@ -301,24 +302,16 @@ document.addEventListener("DOMContentLoaded", () => {
     }
   }
 
-  // --- Timer buttons (in modal) ---
-  if (els.t60) els.t60.onclick = () => setTimerChoice(60);
-  if (els.t90) els.t90.onclick = () => setTimerChoice(90);
-  if (els.t120) els.t120.onclick = () => setTimerChoice(120);
-
-  // ✅ initialize from persisted value (or 60)
-  setTimerChoice(readTimeChoice());
-
   // Difficulty buttons
   els.mEasy.onclick = () => start("easy");
   els.mMedium.onclick = () => start("medium");
   els.mHard.onclick = () => start("hard");
   els.mExtreme.onclick = () => start("extreme");
 
-  // Next 10 = same difficulty, new words, same selected timer
+  // Next 10 = same difficulty, new words, same timer selection
   els.nextBtn.onclick = () => start(mode);
 
-  // Retry = same difficulty + same exact 10 words (same timer selection)
+  // Retry = same difficulty + same exact 10 words
   els.retryBtn.onclick = () => {
     if (!lastRoundWords) return;
     start(lastRoundMode, lastRoundWords);
@@ -333,6 +326,7 @@ document.addEventListener("DOMContentLoaded", () => {
     els.resultCard.classList.add("hidden");
   };
 
-  // Initial
+  // Initial state
+  applyTimeChoice(); // show OFF in HUD if modal default is off
   els.overlay.style.display = "flex";
 });
